@@ -5,7 +5,7 @@ pip to get colossus, camb, halomod, mcfit, pyabel
 
 Set params in params.py
 
-import hm_calcs
+from halomodelpy import hm_calcs
 
 hmobj = hm_calcs.halomodel(zs=(numpy grid of redshifts))
 
