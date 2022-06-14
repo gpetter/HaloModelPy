@@ -7,7 +7,7 @@ from colossus.halo import concentration
 from scipy import special
 from functools import partial
 import astropy.cosmology.units as cu
-import params
+from . import params
 
 paramobj = params.param_obj()
 cosmo = cosmology.setCosmology('planck18')
