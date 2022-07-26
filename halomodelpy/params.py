@@ -3,7 +3,7 @@ import numpy as np
 class param_obj(object):
 	def __init__(self, kgrid_path=None, mgrid_path=None):
 		# k space grid in units h/Mpc
-		self.k_space = np.logspace(-2, 4, 1000)
+		self.k_space = np.logspace(-3, 5, 1000)
 		# mass grid in Msun/h
 		self.mass_space = np.logspace(10, 15, 50)
 
