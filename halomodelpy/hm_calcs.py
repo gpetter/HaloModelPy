@@ -169,6 +169,7 @@ def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, pk_z_2=None, dndz_2=None, projected=
 	else:
 		rgrid, xis = mcfit.P2xi(k_grid, lowring=True)(tot_pk_z, axis=1, extrap=True)
 
+
 	# trick to make interpolation work for logarithmically varying xi (propto r^-2)
 	# multiply xi by r to make smooth in linear space, then divide r back out at end
 	interpedxis = interp1d(rgrid, xis * rgrid)(radii) / radii
