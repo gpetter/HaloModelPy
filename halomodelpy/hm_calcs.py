@@ -4,21 +4,17 @@ import mcfit
 from scipy.interpolate import interp1d
 import astropy.constants as const
 from . import hod_model
-from colossus.cosmology import cosmology
 import astropy.cosmology.units as cu
 from functools import partial
 from scipy import stats
 import pymaster as nmt
 from scipy.special import j0
 import healpy as hp
-
-col_cosmo = cosmology.setCosmology('planck18')
-apcosmo = col_cosmo.toAstropy()
-
-
-# ensure the redshift distribution is properly normalized
-def norm_z_dist(dndz):
-	return dndz[0], dndz[1] / np.trapz(dndz[1], x=dndz[0])
+from . import redshift_helper
+from . import params
+paramobj = params.param_obj()
+col_cosmo = paramobj.col_cosmo
+apcosmo = paramobj.apcosmo
 
 
 # eq from Liu et al. 2015
@@ -75,9 +71,9 @@ def Hubble_z(zs, littleh_units=True):
 # the input power spectra should already be biased wrt dark matter if necessary
 # make sure P(k), k, chi, H have uniform little h units
 def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_zfunc, H_zfunc, pk_z_2=None, dndz_2=None):
-	dndz = norm_z_dist(dndz)
+	dndz = redshift_helper.norm_z_dist(dndz)
 	if dndz_2 is not None:
-		dndz_2 = norm_z_dist(dndz_2)
+		dndz_2 = redshift_helper.norm_z_dist(dndz_2)
 	chi_z, H_z = chi_zfunc(dndz[0]), H_zfunc(dndz[0])
 
 	# convert input thetas to radians from degrees
@@ -120,9 +116,9 @@ def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_zfunc, H_zfunc, pk_z_2=None, 
 
 
 def pk_z_to_cl_gg(pk_z, dndz, ells, k_grid, chi_zfunc, H_zfunc, pk_z_2=None, dndz_2=None):
-	dndz = norm_z_dist(dndz)
+	dndz = redshift_helper.norm_z_dist(dndz)
 	if dndz_2 is not None:
-		dndz_2 = norm_z_dist(dndz_2)
+		dndz_2 = redshift_helper.norm_z_dist(dndz_2)
 	chi_z, H_z = chi_zfunc(dndz[0]), H_zfunc(dndz[0])
 
 	# if doing a cross-correlation between two power spectra, (like two HOD P(k,z)'s),
@@ -150,10 +146,9 @@ def pk_z_to_cl_gg(pk_z, dndz, ells, k_grid, chi_zfunc, H_zfunc, pk_z_2=None, dnd
 # Fourier transform input power spectra to correlation functions, convert to projected CFs wp(rp) if desired,
 # and project to observable for given redshift distribution(s)
 def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, pk_z_2=None, dndz_2=None, projected=True):
-	dndz = norm_z_dist(dndz)
+	dndz = redshift_helper.norm_z_dist(dndz)
 	if dndz_2 is not None:
-		dndz_2 = norm_z_dist(dndz_2)
-	import abel
+		dndz_2 = redshift_helper.norm_z_dist(dndz_2)
 
 	# if doing a cross-correlation between two power spectra, (like two HOD P(k,z)'s),
 	# we want to integrate the product of their square roots
@@ -165,11 +160,15 @@ def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, pk_z_2=None, dndz_2=None, projected=
 		tot_pk_z = pk_z
 		dndz_prod = dndz[1]
 
-	rgrid, xis = mcfit.P2xi(k_grid, lowring=True)(tot_pk_z, axis=1, extrap=True)
-
 	if projected:
-		xis = np.array(abel.direct.direct_transform(xis, r=rgrid, direction='forward', backend='python'))
-	# am i sure this is okay for the projected correlation function? am i actually getting it at r_p?
+		#import abel
+		# am i sure this is okay for the projected correlation function? am i actually getting it at r_p?
+		#xis = np.array(abel.direct.direct_transform(xis, r=rgrid, direction='forward', backend='python'))
+		rgrid, xis = mcfit.Hankel(k_grid, lowring=True)(tot_pk_z, axis=1, extrap=True)
+		xis /= (2 * np.pi)
+	else:
+		rgrid, xis = mcfit.P2xi(k_grid, lowring=True)(tot_pk_z, axis=1, extrap=True)
+
 
 	# trick to make interpolation work for logarithmically varying xi (propto r^-2)
 	# multiply xi by r to make smooth in linear space, then divide r back out at end
@@ -180,7 +179,7 @@ def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, pk_z_2=None, dndz_2=None, projected=
 
 # get cross spectrm C_ell between galaxy overdensity and gravitational lensing
 def c_ell_kappa_g(pk_z, dndz, ls, k_grid, chi_z_func, H_z_func, lin_pk_z, lenskern):
-	dndz = norm_z_dist(dndz)
+	dndz = redshift_helper.norm_z_dist(dndz)
 	qsokern = H_z_func(dndz[0]) / const.c.to(u.km / u.s).value * dndz[1]
 
 	integrand = (const.c.to(u.km / u.s).value * lenskern * qsokern / ((chi_z_func(dndz[0]) ** 2) * H_z_func(dndz[0])))
@@ -311,7 +310,7 @@ class halomodel(object):
 		binned_xpow = wsp.decouple_cell(wsp.couple_cell([xpower]))
 		return binned_xpow[0]
 
-	def get_kappa_prof(self, dndz, theta_bins, l_beam=None, theta_grid=np.radians(np.linspace(0.001, 3, 1000))):
+	def get_binned_kappa_prof(self, dndz, theta_bins, l_beam=None, theta_grid=np.radians(np.linspace(0.001, 3, 1000))):
 		kappa_theta = cmb_kappa(pk_z=self.pk_z, dndz=dndz, k_grid=self.k_grid, lin_pk_z=self.hm.linpk_z,
 								l_beam=l_beam, theta_grid=theta_grid)
 		return stats.binned_statistic(np.degrees(theta_grid), kappa_theta, statistic='mean', bins=theta_bins)[0]

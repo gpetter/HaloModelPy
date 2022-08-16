@@ -10,8 +10,8 @@ import astropy.cosmology.units as cu
 from . import params
 
 paramobj = params.param_obj()
-cosmo = cosmology.setCosmology('planck18')
-apcosmo = cosmo.toAstropy()
+col_cosmo = paramobj.col_cosmo
+apcosmo = paramobj.apcosmo
 param_keys = {'logMmin': 0, 'alpha': 1, 'logM1': 2}
 mass_grid = paramobj.mass_space
 k_grid = paramobj.k_space
@@ -26,7 +26,7 @@ def lin_pk_z(zs, kspace, linpow='EH'):
 	pkz = []
 	if linpow == 'EH':
 		for z in zs:
-			pkz.append(cosmo.matterPowerSpectrum(kspace, z))
+			pkz.append(col_cosmo.matterPowerSpectrum(kspace, z))
 		return np.array(pkz)
 	else:
 		return None
@@ -149,7 +149,7 @@ def bias_m_z(mass_grid, zs):
 def halo_halo_power_spectrum(m1, m2, z):
 	b1, b2 = bias.haloBias(m1, z, mdef='200c', model='tinker10'), bias.haloBias(m2, z, mdef='200c', model='tinker10')
 
-	pk = cosmo.matterPowerSpectrum(k_grid, z) * (u.Mpc / cu.littleh) ** 3
+	pk = col_cosmo.matterPowerSpectrum(k_grid, z) * (u.Mpc / cu.littleh) ** 3
 	return np.outer(b1 * b2, pk)
 
 

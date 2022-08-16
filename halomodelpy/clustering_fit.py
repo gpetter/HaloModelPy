@@ -4,6 +4,7 @@ from . import mcmc
 from functools import partial
 from scipy.optimize import curve_fit
 
+
 def mass_biased_cf(foo, mass, scales, dndz, hmobject, angular):
     hmobject.set_powspec(log_meff=mass)
     if angular:

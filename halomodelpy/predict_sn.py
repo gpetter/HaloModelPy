@@ -12,6 +12,7 @@ def equatorial_to_galactic(ra, dec):
 	bs = np.array(ra_decs.galactic.b.radian * u.rad.to('deg'))
 	return ls, bs
 
+
 # Equations 10-12 of F. Bianchini et al 2015 gives predicted S/N of lensing cross-correlation
 def lensing_SN(coords, biased_hmobj, dndz, lens_map='Planck18', ell_limits=(100, 2000), ell_bins=None, ell_beam=None):
 	# read lensing reconstruction noise file
