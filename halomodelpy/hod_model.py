@@ -8,6 +8,7 @@ from scipy import special
 from functools import partial
 import astropy.cosmology.units as cu
 from . import params
+from . import bias_tools
 
 paramobj = params.param_obj()
 col_cosmo = paramobj.col_cosmo
@@ -257,7 +258,8 @@ class halomod_workspace(object):
 
 	def derived_parameters(self, dndz):
 		beff = np.trapz(self.beff_z * dndz, x=self.zs)
-		meff = log_effective_mass(hmf=self.hmf_z, hod=self.ntot, avg_dens=self.avgdens_z, zs=self.zs, dndz=dndz)
+		#meff = log_effective_mass(hmf=self.hmf_z, hod=self.ntot, avg_dens=self.avgdens_z, zs=self.zs, dndz=dndz)
+		meff = bias_tools.avg_bias_to_mass(beff, self.zs, dndz)
 		f_sat = satellite_fraction(hmf=self.hmf_z, n_sat=self.nsat, avg_dens=self.avgdens_z, zs=self.zs, dndz=dndz)
 
 		return f_sat, beff, meff
