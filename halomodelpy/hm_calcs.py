@@ -12,6 +12,7 @@ from scipy.special import j0
 import healpy as hp
 from . import redshift_helper
 from . import params
+from . import bias_tools
 paramobj = params.param_obj()
 col_cosmo = paramobj.col_cosmo
 apcosmo = paramobj.apcosmo
@@ -254,7 +255,7 @@ class halomodel(object):
 
 	# reset the power spectrum according to an HOD if provided, or an effective mass-biased spectrum
 	def set_powspec(self, hodparams=None, modeltype=None, hodparams2=None, log_meff=None, log_meff_2=None,
-					bias1=None, bias2=None,
+					bias1=None, bias2=None, log_m_min1=None, log_m_min2=None,
 					get1h=True, get2h=True):
 
 		if hodparams is not None:
@@ -271,6 +272,13 @@ class halomodel(object):
 		if log_meff_2 is not None:
 			self.pk_z_2 = self.hm.linpk_z
 			bz = self.hm.bias_relation(M=10 ** log_meff_2, z=self.zs)
+			self.pk_z_2 = (bz ** 2)[:, None] * self.pk_z_2
+		if log_m_min1 is not None:
+			bz = bias_tools.minmass_to_bias_z(log_minmass=log_m_min1, zs=self.zs)
+			self.pk_z = (bz ** 2)[:, None] * self.hm.linpk_z
+		if log_m_min2 is not None:
+			self.pk_z_2 = self.hm.linpk_z
+			bz = bias_tools.minmass_to_bias_z(log_minmass=log_m_min2, zs=self.zs)
 			self.pk_z_2 = (bz ** 2)[:, None] * self.pk_z_2
 		if bias1 is not None:
 			self.pk_z = (bias1 ** 2) * self.hm.linpk_z

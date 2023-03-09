@@ -3,6 +3,7 @@ import numpy as np
 from colossus.cosmology import cosmology
 cosmo = cosmology.setCosmology('planck18')
 from colossus.lss import bias
+from colossus.lss import mass_function
 
 
 
@@ -46,3 +47,36 @@ def avg_bias_to_mass(input_bias, zs, dndz, berr=0):
 		return mass, mass-lomass, upmass-mass
 	else:
 		return np.interp(input_bias, b_avg, masses)
+	
+	
+
+# calculate a bias corresponding to a minimum halo mass required to host a tracer
+# e.g. Petter et al 2023 Eq. 19
+def minmass_to_bias_z(log_minmass, zs):
+	# grid from given minimum mass to high mass where HMF --> 0
+	massgrid = np.logspace(log_minmass, 15, 100)
+	beffs = []
+	# for each redshift
+	for z in zs:
+		# effective bias at redshift is integral of HMF(M, z)*bias(M, z)*dM
+		mfunc = mass_function.massFunction(massgrid, z, mdef='200c', model='tinker08', q_out='dndlnM')
+		bm_z = bias.haloBias(M=massgrid, z=z, mdef='200c', model='tinker10')
+		beffs.append(np.trapz(bm_z * mfunc, x=np.log(massgrid)) / np.trapz(mfunc, x=np.log(massgrid)))
+	return np.array(beffs)
+
+
+def minmass_to_bias(dndz, log_minmass):
+
+	zs, dndzs = dndz
+	beffs = minmass_to_bias_z(log_minmass, zs)
+
+	# average over redshifts is integral over dN/dz
+	return np.trapz(np.array(beffs) * np.array(dndzs), x=zs)
+
+# go from effective bias to minimum host halo mass by inverting above function
+def bias_to_minmass(dndz, bias, minmass_grid=np.linspace(12., 14.5, 50)):
+
+	biases_for_minmasses = []
+	for j in range(len(minmass_grid)):
+		biases_for_minmasses.append(minmass_to_bias(dndz, minmass_grid[j]))
+	return np.interp(bias, biases_for_minmasses, minmass_grid)
