@@ -56,3 +56,32 @@ def lensing_SN(coords, biased_hmobj, dndz, lens_map='Planck18', ell_limits=(100,
 		ell_beam = ell_beam[np.where((np.arange(len(ell_beam)) > ell_limits[0]) & (np.arange(len(ell_beam)) < ell_limits[1]))]
 		return np.sqrt(np.sum(ell_beam*np.square(signoise)))
 	return np.arange(ell_limits[0], ell_limits[1]-1), signoise
+
+
+# Equations 10-12 of F. Bianchini et al 2015 gives predicted S/N of lensing cross-correlation
+def clustering_SN(fsky, skydensity, biased_hmobj, dndz, ell_limits=(100, 2000), ell_bins=None, theta_bins=None, ell_beam=None):
+	ells = np.arange(300, 100000)
+	if theta_bins is not None:
+		ell_bins = np.flip(180. / theta_bins)
+
+	# prediction for galaxy autospectrum
+	gal_corr = biased_hmobj.get_c_ell_gg(dndz, ells)
+
+
+	dens_steradian = 41252.96125 * skydensity / (4 * np.pi)
+	shotnoise = 1 / dens_steradian
+
+	signoise = np.sqrt(((2 * ells + 1) * fsky * gal_corr ** 2) /
+					   ((gal_corr ** 2) + (gal_corr + shotnoise)**2))
+
+	if ell_bins is not None:
+		sn_bin = []
+		for j in range(len(ell_bins) - 1):
+			inbin = np.where((ells < ell_bins[j+1]) & (ells > ell_bins[j]))[0]
+
+			sn_bin.append(np.sqrt(np.sum(np.square(signoise[inbin]))))
+		return sn_bin
+	elif ell_beam is not None:
+		ell_beam = ell_beam[np.where((np.arange(len(ell_beam)) > ell_limits[0]) & (np.arange(len(ell_beam)) < ell_limits[1]))]
+		return np.sqrt(np.sum(ell_beam*np.square(signoise)))
+	return np.arange(ell_limits[0], ell_limits[1]-1), signoise
