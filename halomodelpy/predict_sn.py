@@ -58,7 +58,6 @@ def lensing_SN(coords, biased_hmobj, dndz, lens_map='Planck18', ell_limits=(100,
 	return np.arange(ell_limits[0], ell_limits[1]-1), signoise
 
 
-# Equations 10-12 of F. Bianchini et al 2015 gives predicted S/N of lensing cross-correlation
 def clustering_SN(fsky, skydensity, biased_hmobj, dndz, ell_limits=(100, 2000), ell_bins=None, theta_bins=None, ell_beam=None):
 	ells = np.arange(300, 100000)
 	if theta_bins is not None:

@@ -179,12 +179,12 @@ def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, pk_z_2=None, dndz_2=None, projected=
 
 
 # get cross spectrm C_ell between galaxy overdensity and gravitational lensing
-def c_ell_kappa_g(pk_z, dndz, ls, k_grid, chi_z_func, H_z_func, lin_pk_z, lenskern):
+def c_ell_kappa_g(pk_z, dndz, ells, k_grid, chi_z_func, H_z_func, lin_pk_z, lenskern):
 	dndz = redshift_helper.norm_z_dist(dndz)
 	qsokern = H_z_func(dndz[0]) / const.c.to(u.km / u.s).value * dndz[1]
 
 	integrand = (const.c.to(u.km / u.s).value * lenskern * qsokern / ((chi_z_func(dndz[0]) ** 2) * H_z_func(dndz[0])))
-	ks = np.outer(1. / chi_z_func(dndz[0]), (ls + 1 / 2.))
+	ks = np.outer(1. / chi_z_func(dndz[0]), (ells + 1 / 2.))
 
 	# P(k) is b^2 P_lin, so sqrt(P(k)) * sqrt(P_lin) = b * P_lin
 	pk_z = np.sqrt(pk_z) * np.sqrt(lin_pk_z)
@@ -307,16 +307,17 @@ class halomodel(object):
 		wp = self.get_spatial_cf(dndz=dndz, radii=sepgrid, dndz_2=dndz_2, projected=projected)
 		return stats.binned_statistic(sepgrid, wp, statistic='mean', bins=radius_bins)[0]
 
-	def get_c_ell_kg(self, dndz, ls):
-		return c_ell_kappa_g(pk_z=self.pk_z, dndz=dndz, ls=ls, k_grid=self.k_grid, chi_z_func=self.chizfunc,
+	def get_c_ell_kg(self, dndz, ells):
+		return c_ell_kappa_g(pk_z=self.pk_z, dndz=dndz, ells=ells, k_grid=self.k_grid, chi_z_func=self.chizfunc,
 							 H_z_func=self.hzfunc, lin_pk_z=self.hm.linpk_z, lenskern=self.lens_kernel)
 
-	def get_binned_c_ell_kg(self, dndz, ls):
-		xpower = self.get_c_ell_kg(dndz=dndz, ls=ls)
-		wsp = nmt.NmtWorkspace()
-		wsp.read_from('masks/namaster/planck_workspace.fits')
-		binned_xpow = wsp.decouple_cell(wsp.couple_cell([xpower]))
-		return binned_xpow[0]
+	def get_binned_c_ell_kg(self, dndz, ells, ell_bins=None, master_workspace=None):
+		xpower = self.get_c_ell_kg(dndz=dndz, ells=ells)
+		if master_workspace is not None:
+			binned_xpow = master_workspace.decouple_cell(master_workspace.couple_cell([xpower]))[0]
+		else:
+			binned_xpow = 10 ** (stats.binned_statistic(ells, np.log10(xpower), statistic='median', bins=ell_bins)[0])
+		return binned_xpow
 
 	def get_binned_kappa_prof(self, dndz, theta_bins, l_beam=None, theta_grid=np.radians(np.linspace(0.001, 3, 1000))):
 		kappa_theta = cmb_kappa(pk_z=self.pk_z, dndz=dndz, k_grid=self.k_grid, lin_pk_z=self.hm.linpk_z,

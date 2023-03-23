@@ -2,13 +2,19 @@ import numpy as np
 from . import hm_calcs
 from functools import partial
 from scipy.optimize import curve_fit
+from . import interpolate_helper
 
 
 # functions to call for fits
 # take a halo mass or bias factor, return model cross correlation or kappa stack
-def mass_biased_xcorr(foo, mass, ells, dndz, hmobject):
+def mass_biased_xcorr(foo, mass, ells, dndz, hmobject, ell_bins):
 	hmobject.set_powspec(log_meff=mass)
-	return hmobject.get_binned_c_ell_kg(dndz=dndz, ls=ells)
+	return hmobject.get_binned_c_ell_kg(dndz=dndz, ells=ells, ell_bins=ell_bins)
+
+
+def minmass_biased_xcorr(foo, minmass, ells, dndz, hmobject, ell_bins):
+	hmobject.set_powspec(log_m_min1=minmass)
+	return hmobject.get_binned_c_ell_kg(dndz=dndz, ells=ells, ell_bins=ell_bins)
 
 
 def mass_biased_stack(foo, mass, theta_bins, dndz, hmobject, l_beam=None):
@@ -16,9 +22,9 @@ def mass_biased_stack(foo, mass, theta_bins, dndz, hmobject, l_beam=None):
 	return hmobject.get_binned_kappa_prof(dndz=dndz, theta_bins=theta_bins, l_beam=l_beam)
 
 
-def biased_xcorr(foo, bias, ells, dndz, hmobject):
+def biased_xcorr(foo, bias, ells, dndz, hmobject, ell_bins):
 	hmobject.set_powspec(bias1=bias)
-	return hmobject.get_binned_c_ell_kg(dndz=dndz, ls=ells)
+	return hmobject.get_binned_c_ell_kg(dndz=dndz, ells=ells, ell_bins=ell_bins)
 
 
 def biased_stack(foo, bias, theta_bins, dndz, hmobject, l_beam=None):
@@ -33,24 +39,66 @@ def fit_xcorr(dndz, xcorr, model='mass'):
 	# initialize halo model
 	hmobj = hm_calcs.halomodel(zs=dndz[0])
 	ells = np.arange(30, 3000)
+	ell_bins = xcorr[0]
+	unbiasedmod = hmobj.get_c_ell_kg(dndz=dndz, ells=ells)
 
 	# fit for a constant effective mass from which bias b(M,z) is calculated
 	if model == 'mass':
-		partialfun = partial(mass_biased_xcorr, ells=ells, dndz=dndz, hmobject=hmobj)
-		popt, pcov = curve_fit(partialfun, np.ones(len(xcorr[0])), xcorr[0], sigma=xcorr[1], absolute_sigma=True,
+		partialfun = partial(mass_biased_xcorr, ells=ells, dndz=dndz, hmobject=hmobj, ell_bins=ell_bins)
+		popt, pcov = curve_fit(partialfun, np.ones(len(xcorr[1])), xcorr[1], sigma=xcorr[2], absolute_sigma=True,
 							   bounds=[11, 14], p0=12.5)
 		hmobj.set_powspec(log_meff=popt[0])
-		bestmodel = (ells, hmobj.get_c_ell_kg(dndz, ells))
+		bestmodel = (ells, hmobj.get_c_ell_kg(dndz, ells), unbiasedmod)
 
 	# fit for a constant bias across redshift
 	elif model == 'bias':
-		partialfun = partial(biased_xcorr, ells=ells, dndz=dndz, hmobject=hmobj)
-		popt, pcov = curve_fit(partialfun, np.ones(len(xcorr[0])), xcorr[0], sigma=xcorr[1], absolute_sigma=True,
+		partialfun = partial(biased_xcorr, ells=ells, dndz=dndz, hmobject=hmobj, ell_bins=ell_bins)
+		popt, pcov = curve_fit(partialfun, np.ones(len(xcorr[1])), xcorr[1], sigma=xcorr[2], absolute_sigma=True,
 							   bounds=[0.5, 10], p0=2)
 		hmobj.set_powspec(bias1=popt[0])
-		bestmodel = (ells, hmobj.get_c_ell_kg(dndz, ells))
+		bestmodel = (ells, hmobj.get_c_ell_kg(dndz, ells), unbiasedmod)
+
+	elif model == 'minmass':
+		partialfun = partial(minmass_biased_xcorr, ells=ells, dndz=dndz, hmobject=hmobj, ell_bins=ell_bins)
+		popt, pcov = curve_fit(partialfun, np.ones(len(xcorr[1])), xcorr[1], sigma=xcorr[2], absolute_sigma=True,
+							   bounds=[11, 14], p0=12.)
+		hmobj.set_powspec(bias1=popt[0])
+		bestmodel = (ells, hmobj.get_c_ell_kg(dndz, ells), unbiasedmod)
+
 
 	return popt[0], np.sqrt(pcov)[0][0], bestmodel
+
+
+def xcorr_fit_pipeline(dndz, xcorr):
+	import matplotlib.pyplot as plt
+	try:
+		plt.style.use(['science', '/home/graysonpetter/ssd/Dartmouth/mpl_style/pub.mplstyle'])
+	except:
+		print()
+	bincenters = interpolate_helper.bin_centers(xcorr[0], 'geo_mean')
+	fig, ax = plt.subplots(figsize=(8, 7))
+	ax.scatter(bincenters, xcorr[1], c='k')
+	ax.errorbar(bincenters, xcorr[1], yerr=xcorr[2], ecolor='k', fmt='none')
+
+	b, berr, b_model = fit_xcorr(dndz=dndz, xcorr=xcorr, model='bias')
+	m, merr, m_model = fit_xcorr(dndz=dndz, xcorr=xcorr, model='mass')
+	mmin, mmin_err, mmin_model = fit_xcorr(dndz=dndz, xcorr=xcorr, model='minmass')
+
+	ax.text(0.1, 0.2, '$b = %s \pm %s$' % (round(b, 2), round(berr, 2)), transform=plt.gca().transAxes, fontsize=15)
+	ax.text(0.1, 0.15, '$log_{10}(M_{\mathrm{eff}}) = %s \pm %s$' % (round(m, 2), round(merr, 2)),
+			transform=plt.gca().transAxes, fontsize=15)
+	ax.text(0.1, 0.1, '$log_{10}(M_{\mathrm{min}}) = %s \pm %s$' % (round(mmin, 2), round(mmin_err, 2)),
+			transform=plt.gca().transAxes, fontsize=15)
+
+	plt.plot(b_model[0], b_model[1], c='k', ls='dotted')
+	plt.plot(b_model[0], b_model[2], c='k', ls='dashed')
+	plt.xscale('log')
+	plt.yscale('log')
+
+	plt.xlabel(r'$\ell$', fontsize=20)
+	plt.ylabel(r'$C_{\ell}$', fontsize=20)
+
+	return ax
 
 
 # fit a lensing convergence profile
