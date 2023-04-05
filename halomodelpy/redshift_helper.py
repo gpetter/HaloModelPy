@@ -8,6 +8,9 @@ def norm_z_dist(dndz):
 
 
 def dndz_from_z_list(zs, nbins):
+	if np.min(zs) <= 0.:
+		print('Warning: redshifts z<=0 passed, cutting')
+		zs = zs[np.where(zs > 0.)]
 	dndz, zbins = np.histogram(zs, bins=nbins, density=True)
 	zcenters = interpolate_helper.bin_centers(zbins, method='mean')
 	dndz = dndz / np.trapz(dndz, x=zcenters)
