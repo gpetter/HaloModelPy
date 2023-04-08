@@ -22,3 +22,18 @@ class param_obj(object):
 		self.sigma_logM = 0.4
 		self.M1_over_M0 = 12
 
+		self.matter_power_source = 'camb'
+
+		if self.matter_power_source == 'camb':
+			import camb
+			# Set up a new set of parameters for CAMB
+			pars = camb.CAMBparams()
+			# This function sets up CosmoMC-like settings, with one massive neutrino and helium set using BBN consistency
+			pars.set_cosmology(H0=self.apcosmo.H0.value, ombh2=self.apcosmo.Ob0*self.col_cosmo.h2,
+								omch2=self.apcosmo.Odm0*self.col_cosmo.h2, omk=self.col_cosmo.Ok0)
+			pars.InitPower.set_params(ns=self.col_cosmo.ns)
+			#self.PK = camb.get_matter_power_interpolator(pars, zmax=5., nonlinear=False,
+			#						hubble_units=True, k_hunit=True, kmax=np.max(np.log10(self.k_space)))
+			self.cambpars = pars
+		else:
+			self.cambpars = None

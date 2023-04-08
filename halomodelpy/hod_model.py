@@ -1,6 +1,5 @@
 import numpy as np
 from colossus.lss import bias
-from colossus.cosmology import cosmology
 from colossus.lss import mass_function
 import astropy.units as u
 from colossus.halo import concentration
@@ -9,6 +8,7 @@ from functools import partial
 import astropy.cosmology.units as cu
 from . import params
 from . import bias_tools
+import camb
 
 paramobj = params.param_obj()
 col_cosmo = paramobj.col_cosmo
@@ -29,6 +29,17 @@ def lin_pk_z(zs, kspace, linpow='EH'):
 		for z in zs:
 			pkz.append(col_cosmo.matterPowerSpectrum(kspace, z))
 		return np.array(pkz)
+	elif linpow == 'CAMB':
+		cambpars = paramobj.cambpars
+		cambpars.set_matter_power(redshifts=zs, kmax=2.)
+		results = camb.get_results(cambpars)
+		kh, z, pkz = results.get_matter_power_spectrum(minkh=np.min(kspace), maxkh=np.max(kspace), npoints=len(kspace))
+		return np.array(pkz)
+	#elif linpow == 'CAMB_interp':
+		#camb_interpolator = paramobj.PK
+		#for z in zs:
+		#	pkz.append(camb_interpolator(z, kspace))
+		#return np.array(pkz)
 	else:
 		return None
 

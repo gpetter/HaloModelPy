@@ -241,9 +241,9 @@ def cmb_kappa(pk_z, dndz, k_grid, lin_pk_z, l_beam=None, theta_grid=np.radians(n
 # compute statistics for dark matter or tracers linearly biased against it
 class halomodel(object):
 
-	def __init__(self, zs, littleh_units=True):
+	def __init__(self, zs, littleh_units=True, linpow='EH'):
 		self.zs = zs
-		self.hm = hod_model.halomod_workspace(zs=self.zs)
+		self.hm = hod_model.halomod_workspace(zs=self.zs, linpow=linpow)
 		self.pk_z = self.hm.linpk_z
 		self.k_grid = self.hm.k_grid
 		self.chizfunc = partial(chi_z_func, littleh_units=littleh_units)
@@ -283,8 +283,7 @@ class halomodel(object):
 		if bias1 is not None:
 			self.pk_z = (bias1 ** 2) * self.hm.linpk_z
 		if bias2 is not None:
-			self.pk_z_2 = self.hm.linpk_z
-			self.pk_z_2 *= bias2 ** 2
+			self.pk_z_2 = (bias2 ** 2) * self.hm.linpk_z
 
 
 	def get_ang_cf(self, dndz, thetas, dndz_2=None):
