@@ -5,10 +5,11 @@ cosmo = cosmology.setCosmology('planck18')
 from colossus.lss import bias
 from colossus.lss import mass_function
 
+def mass2bias(logmh, z):
+	return bias.haloBias(M=10**logmh, z=z, mdef='200c', model='tinker10')
 
-
-def bias_to_mass(inputbias, z):
-	masses = np.logspace(10, 14, 1000)
+def bias2mass(inputbias, z):
+	masses = np.logspace(10, 15, 1000)
 	biases_from_masses = bias.haloBias(M=masses, z=z, mdef='200c', model='tinker10')
 	return np.interp(inputbias, biases_from_masses, np.log10(masses))
 
