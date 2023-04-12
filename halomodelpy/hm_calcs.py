@@ -7,7 +7,6 @@ from . import hod_model
 import astropy.cosmology.units as cu
 from functools import partial
 from scipy import stats
-import pymaster as nmt
 from scipy.special import j0
 import healpy as hp
 from . import redshift_helper

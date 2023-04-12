@@ -169,7 +169,7 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 
 
 # fit for bias, effective mass, minimum mass, and return diagnostic plot
-def fit_pipeline(dndz, cf):
+def fit_pipeline(dndz, cf, dndL=None):
 	import matplotlib.pyplot as plt
 	from plottools import aesthetic
 
@@ -192,6 +192,11 @@ def fit_pipeline(dndz, cf):
 	outdict['b'], outdict['sigb'] = b, berr
 	outdict['M'], outdict['sigM'] = m, merr
 	outdict['Mmin'], outdict['sigMmin'] = mmin, mmin_err
+	if dndL is not None:
+		from . import luminosityfunction
+		fduty = luminosityfunction.occupation_fraction(dndL, dndz, logminmasses=mmin)[0]
+		ax.text(0.1, 0.05, r'$f_{\mathrm{duty}} = %s$' % (round(fduty, 4)),
+				transform=plt.gca().transAxes, fontsize=15)
 	
 	ax.text(0.1, 0.2, '$b = %s \pm %s$' % (round(b, 2), round(berr, 2)),
 			transform=plt.gca().transAxes, fontsize=15)
