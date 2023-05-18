@@ -155,7 +155,7 @@ def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, pk_z_2=None, dndz_2=None, projected=
 	# and integrate over the product of their redshift distributions
 	if pk_z_2 is not None:
 		tot_pk_z = np.sqrt(pk_z) * np.sqrt(pk_z_2)
-		dndz_prod = np.sqrt(dndz[1]) * np.sqrt(dndz_2[1])
+		dndz_prod = np.sqrt(dndz[1] * dndz_2[1])
 	else:
 		tot_pk_z = pk_z
 		dndz_prod = dndz[1]

@@ -58,6 +58,8 @@ def biased_xcf(foo, bias1, bias2, dndz1, dndz2, scales, hmobject, angular):
 		return hmobject.get_binned_spatial_cf(dndz1, scales, dndz_2=dndz2)
 
 
+
+
 # fit either a projected or angular correlation function for an effective bias or halo mass
 def fit_cf(dndz, cf, model='mass'):
 	# initialize halo model
@@ -130,11 +132,11 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 		unbiasedmod = hmobj.get_spatial_cf(dndz_x, radii=modscales, dndz_2=dndz_auto)
 
 	autofit = fit_cf(dndz=dndz_auto, cf=autocf, model=model)
-	par2, err2 = autofit[0], autofit[1]
+	par_auto, err_auto = autofit[0], autofit[1]
 
 	# if fitting for an effective halo mass
 	if model == 'mass':
-		partialfun = partial(mass_biased_xcf, mass2=par2, dndz1=dndz_x, dndz2=dndz_auto, scales=scalebins,
+		partialfun = partial(mass_biased_xcf, mass2=par_auto, dndz1=dndz_x, dndz2=dndz_auto, scales=scalebins,
 							 hmobject=hmobj, angular=angular)
 		popt, pcov = curve_fit(partialfun, None, xcorr, sigma=xerr, absolute_sigma=True,
 							   bounds=[11, 14], p0=12.5)
@@ -142,13 +144,13 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 
 	# if fitting for an effective bias
 	elif model == 'bias':
-		partialfun = partial(biased_xcf, bias2=par2, dndz1=dndz_x, dndz2=dndz_auto, scales=scalebins,
+		partialfun = partial(biased_xcf, bias2=par_auto, dndz1=dndz_x, dndz2=dndz_auto, scales=scalebins,
 							 hmobject=hmobj, angular=angular)
 		popt, pcov = curve_fit(partialfun, None, xcorr, sigma=xerr, absolute_sigma=True,
 							   bounds=[0.5, 30], p0=2)
 		hmobj.set_powspec(bias1=popt[0])
 	elif model == 'minmass':
-		partialfun = partial(minmass_biased_xcf, minmass2=par2, dndz1=dndz_x, dndz2=dndz_auto, scales=scalebins,
+		partialfun = partial(minmass_biased_xcf, minmass2=par_auto, dndz1=dndz_x, dndz2=dndz_auto, scales=scalebins,
 							 hmobject=hmobj, angular=angular)
 		popt, pcov = curve_fit(partialfun, None, xcorr, sigma=xerr, absolute_sigma=True,
 							   bounds=[11, 14], p0=12.)
@@ -171,7 +173,6 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 # fit for bias, effective mass, minimum mass, and return diagnostic plot
 def fit_pipeline(dndz, cf, dndL=None):
 	import matplotlib.pyplot as plt
-	from plottools import aesthetic
 
 	if 'rp' in cf:
 		angular = False
@@ -267,6 +268,10 @@ def xfit_pipeline(dndz_x, cf_x, dndz_auto, autocf):
 	mx, mxerr, mx_model = fit_xcf(dndz_x=dndz_x, cf_x=cf_x, dndz_auto=dndz_auto, autocf=autocf, model='mass')
 	mxmin, mxmin_err, mxmin_model = fit_xcf(dndz_x=dndz_x, cf_x=cf_x, dndz_auto=dndz_auto,
 											autocf=autocf, model='minmass')
+
+	outdict['bx'], outdict['sigbx'] = bx, bxerr
+	outdict['Mx'], outdict['sigMx'] = mx, mxerr
+	outdict['Mxmin'], outdict['sigMxmin'] = mxmin, mxmin_err
 
 	ax2.plot(bx_model[0], bx_model[1], c='k', ls='dotted')
 	ax2.plot(bx_model[0], bx_model[2], c='k', ls='dashed')

@@ -39,28 +39,28 @@ def fit_xcorr(dndz, xcorr, model='mass'):
 	# initialize halo model
 	hmobj = hm_calcs.halomodel(zs=dndz[0])
 	ells = np.arange(30, 3000)
-	ell_bins = xcorr[0]
+	scalebins, scales, corr, err = xcorr['ell_bins'], xcorr['ell'], xcorr['cl'], xcorr['cl_err']
 	unbiasedmod = hmobj.get_c_ell_kg(dndz=dndz, ells=ells)
 
 	# fit for a constant effective mass from which bias b(M,z) is calculated
 	if model == 'mass':
-		partialfun = partial(mass_biased_xcorr, ells=ells, dndz=dndz, hmobject=hmobj, ell_bins=ell_bins)
-		popt, pcov = curve_fit(partialfun, np.ones(len(xcorr[1])), xcorr[1], sigma=xcorr[2], absolute_sigma=True,
+		partialfun = partial(mass_biased_xcorr, ells=ells, dndz=dndz, hmobject=hmobj, ell_bins=scalebins)
+		popt, pcov = curve_fit(partialfun, np.ones(len(corr)), corr, sigma=err, absolute_sigma=True,
 							   bounds=[11, 14], p0=12.5)
 		hmobj.set_powspec(log_meff=popt[0])
 		bestmodel = (ells, hmobj.get_c_ell_kg(dndz, ells), unbiasedmod)
 
 	# fit for a constant bias across redshift
 	elif model == 'bias':
-		partialfun = partial(biased_xcorr, ells=ells, dndz=dndz, hmobject=hmobj, ell_bins=ell_bins)
-		popt, pcov = curve_fit(partialfun, np.ones(len(xcorr[1])), xcorr[1], sigma=xcorr[2], absolute_sigma=True,
+		partialfun = partial(biased_xcorr, ells=ells, dndz=dndz, hmobject=hmobj, ell_bins=scalebins)
+		popt, pcov = curve_fit(partialfun, np.ones(len(corr)), corr, sigma=err, absolute_sigma=True,
 							   bounds=[0.5, 10], p0=2)
 		hmobj.set_powspec(bias1=popt[0])
 		bestmodel = (ells, hmobj.get_c_ell_kg(dndz, ells), unbiasedmod)
 
 	elif model == 'minmass':
-		partialfun = partial(minmass_biased_xcorr, ells=ells, dndz=dndz, hmobject=hmobj, ell_bins=ell_bins)
-		popt, pcov = curve_fit(partialfun, np.ones(len(xcorr[1])), xcorr[1], sigma=xcorr[2], absolute_sigma=True,
+		partialfun = partial(minmass_biased_xcorr, ells=ells, dndz=dndz, hmobject=hmobj, ell_bins=scalebins)
+		popt, pcov = curve_fit(partialfun, np.ones(len(corr)), corr, sigma=err, absolute_sigma=True,
 							   bounds=[11, 14], p0=12.)
 		hmobj.set_powspec(bias1=popt[0])
 		bestmodel = (ells, hmobj.get_c_ell_kg(dndz, ells), unbiasedmod)
@@ -71,18 +71,20 @@ def fit_xcorr(dndz, xcorr, model='mass'):
 
 def xcorr_fit_pipeline(dndz, xcorr):
 	import matplotlib.pyplot as plt
-	try:
-		plt.style.use(['science', '/home/graysonpetter/ssd/Dartmouth/mpl_style/pub.mplstyle'])
-	except:
-		print()
-	bincenters = interpolate_helper.bin_centers(xcorr[0], 'geo_mean')
+	scalebins, scales, corr, err = xcorr['ell_bins'], xcorr['ell'], xcorr['cl'], xcorr['cl_err']
+
 	fig, ax = plt.subplots(figsize=(8, 7))
-	ax.scatter(bincenters, xcorr[1], c='k')
-	ax.errorbar(bincenters, xcorr[1], yerr=xcorr[2], ecolor='k', fmt='none')
+	ax.scatter(scales, corr, c='k')
+	ax.errorbar(scales, corr, yerr=err, ecolor='k', fmt='none')
 
 	b, berr, b_model = fit_xcorr(dndz=dndz, xcorr=xcorr, model='bias')
 	m, merr, m_model = fit_xcorr(dndz=dndz, xcorr=xcorr, model='mass')
 	mmin, mmin_err, mmin_model = fit_xcorr(dndz=dndz, xcorr=xcorr, model='minmass')
+
+	outdict = {}
+	outdict['b'], outdict['sigb'] = b, berr
+	outdict['M'], outdict['sigM'] = m, merr
+	outdict['Mmin'], outdict['sigMmin'] = mmin, mmin_err
 
 	ax.text(0.1, 0.2, '$b = %s \pm %s$' % (round(b, 2), round(berr, 2)), transform=plt.gca().transAxes, fontsize=15)
 	ax.text(0.1, 0.15, '$log_{10}(M_{\mathrm{eff}}) = %s \pm %s$' % (round(m, 2), round(merr, 2)),
@@ -97,8 +99,10 @@ def xcorr_fit_pipeline(dndz, xcorr):
 
 	plt.xlabel(r'$\ell$', fontsize=20)
 	plt.ylabel(r'$C_{\ell}$', fontsize=20)
+	plt.close()
+	outdict['plot'] = fig
 
-	return ax
+	return outdict
 
 
 # fit a lensing convergence profile

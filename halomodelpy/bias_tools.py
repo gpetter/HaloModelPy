@@ -81,3 +81,47 @@ def bias_to_minmass(dndz, bias, minmass_grid=np.linspace(12., 14.5, 50)):
 	for j in range(len(minmass_grid)):
 		biases_for_minmasses.append(minmass_to_bias(dndz, minmass_grid[j]))
 	return np.interp(bias, biases_for_minmasses, minmass_grid)
+
+
+# calculate bias predicted by parameterizations of quasar bias as function of redshift given by
+# Croom et al 2005 or Laurent et al. 2017
+def qso_bias_for_z(paper, zs, dndz=None, n_draws=100):
+
+	if paper == 'laurent':
+		a0, a1, a2 = 2.393, 0.278, 6.565
+		sig_a0, sig_a1 = 0.042, 0.018
+	elif paper == 'croom':
+		a0, a1, a2 = 0.53, 0.289, 0
+		sig_a0, sig_a1 = 0.19, 0.035
+	else:
+		return 'Invalid paper name. Use croom for Croom+05 or laurent for Laurent+17'
+
+	# form of Croom and Laurent parameterization of bias with redshift
+	lit_bias = a0 + a1 * ((1+zs) ** 2 - a2)
+
+	# same as above but randomly drawn from error in parameterization n_draws times
+	bias_draws = np.repeat(np.random.normal(a0, sig_a0, n_draws)[None, :], len(zs), axis=0) \
+	             + np.outer(((1+zs) ** 2 - a2), np.random.normal(a1, sig_a1, n_draws))
+
+	# if a redshift distribution given, average over using dn/dz as weight
+	if dndz is not None:
+		avg_b = np.average(lit_bias, weights=dndz)
+
+		avg_b_draws = np.average(bias_draws, weights=dndz, axis=0)
+
+		avg_b_std = np.std(avg_b_draws, axis=0)
+		return avg_b, avg_b_std
+
+	# if no redshift distribution given, just return the bias at each z, and the uncertainty at each z
+	else:
+		b_std = np.std(bias_draws, axis=1)
+		return lit_bias, b_std
+
+def qso_mass_for_z(paper, zs, dndz=None, n_draws=100):
+	b, berr = qso_bias_for_z(paper, zs, dndz, n_draws)
+	m, mhi, mlo = [], [], []
+	for j in range(len(zs)):
+		m.append(bias2mass(b[j], zs[j]))
+		mhi.append(bias2mass(b[j] + berr[j], zs[j]))
+		mlo.append(bias2mass(b[j] - berr[j], zs[j]))
+	return m, mhi, mlo
