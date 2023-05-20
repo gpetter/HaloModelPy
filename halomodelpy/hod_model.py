@@ -256,7 +256,8 @@ class halomod_workspace(object):
 	def two_halo_power_z(self):
 		return two_halo_power_spectrum(b_arr=self.beff_z, pk_z=self.linpk_z)
 
-	def hod_power_z(self, get1h=True, get2h=True, smooth_transition_index=0.75):
+	def hod_power_z(self, params, modeltype, get1h=True, get2h=True, smooth_transition_index=0.75):
+		self.set_hod(params, modeltype)
 		pow1h = self.one_halo_power_z()
 		pow2h = self.two_halo_power_z()
 		if get1h and get2h:

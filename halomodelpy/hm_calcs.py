@@ -12,6 +12,7 @@ import healpy as hp
 from . import redshift_helper
 from . import params
 from . import bias_tools
+from . import ccl_tools
 paramobj = params.param_obj()
 col_cosmo = paramobj.col_cosmo
 apcosmo = paramobj.apcosmo
@@ -21,12 +22,12 @@ apcosmo = paramobj.apcosmo
 # return lensing kernel for CMB (if no source redshifts provided)
 # or lensing kernel for galaxy weak lensing if source redshifts are provided
 def lensing_kernel(lens_zs, chi_z_func=apcosmo.comoving_distance, H0=apcosmo.H0, om_0=apcosmo.Om0,
-				   source_zs=None, cmb_z=1090.):
+				   source_zs=None):
 	prefactor = 3. / 2. * om_0 * ((H0 / const.c.to(u.km / u.s).value) ** 2) * (1 + lens_zs) * chi_z_func(lens_zs)
 	# if no source redshifts, return CMB lensing kernel
 	if source_zs is None:
-		wk = prefactor * (chi_z_func(cmb_z) - chi_z_func(
-			lens_zs)) / chi_z_func(cmb_z)
+		wk = prefactor * (chi_z_func(paramobj.cmb_z) - chi_z_func(
+			lens_zs)) / chi_z_func(paramobj.cmb_z)
 	# if source redshifts given,
 	else:
 		# calculate dn/dz for sources
@@ -200,10 +201,12 @@ def c_ell_kappa_g(pk_z, dndz, ells, k_grid, chi_z_func, H_z_func, lin_pk_z, lens
 
 
 # defining the critical surface density for lensing
-def sigma_crit(z, z_cmb=1090.):
-	return ((const.c ** 2) / (4. * np.pi * const.G) * (apcosmo.angular_diameter_distance(z_cmb) / (
-		(apcosmo.angular_diameter_distance(z) * apcosmo.angular_diameter_distance_z1z2(z, z_cmb))))).decompose().to(
-		u.solMass * cu.littleh / u.kpc ** 2, cu.with_H0(apcosmo.H0))
+def sigma_crit(z):
+	return ((const.c ** 2) / (4. * np.pi * const.G) *
+			(apcosmo.angular_diameter_distance(paramobj.cmb_z) /
+			((apcosmo.angular_diameter_distance(z) *
+			apcosmo.angular_diameter_distance_z1z2(z, paramobj.cmb_z))))).decompose().to(
+			u.solMass * cu.littleh / u.kpc ** 2, cu.with_H0(apcosmo.H0))
 
 
 # model lensing convergence profile for stack
@@ -240,17 +243,19 @@ def cmb_kappa(pk_z, dndz, k_grid, lin_pk_z, l_beam=None, theta_grid=np.radians(n
 # compute statistics for dark matter or tracers linearly biased against it
 class halomodel(object):
 
-	def __init__(self, zs, littleh_units=True, linpow='EH'):
-		self.zs = zs
-		self.hm = hod_model.halomod_workspace(zs=self.zs, linpow=linpow)
-		self.pk_z = self.hm.linpk_z
-		self.k_grid = self.hm.k_grid
+	def __init__(self, zs, littleh_units=True, transfer='eisenstein_hu', cclmode=True):
+		self.zs = np.array(zs)
+		#self.hm = hod_model.halomod_workspace(zs=self.zs, linpow=linpow)
+		self.hm = ccl_tools.HOD_model(self.zs, transfer=transfer)
+		self.lin_pk_z = self.hm.linpk_z
+		self.pk_z = self.lin_pk_z
+		self.k_grid = paramobj.k_space
+		self.bias_relation = paramobj.bias_relation
 		self.chizfunc = partial(chi_z_func, littleh_units=littleh_units)
 		self.hzfunc = partial(Hubble_z, littleh_units=littleh_units)
-		# second power spectrum in case of cross-correlation
-		self.hm2 = None
+
 		self.pk_z_2 = None
-		self.lens_kernel = lensing_kernel(lens_zs=zs, chi_z_func=chi_z_func, H0=self.hzfunc(0))
+		self.lens_kernel = lensing_kernel(lens_zs=self.zs, chi_z_func=chi_z_func, H0=self.hzfunc(0))
 
 	# reset the power spectrum according to an HOD if provided, or an effective mass-biased spectrum
 	def set_powspec(self, hodparams=None, modeltype=None, hodparams2=None, log_meff=None, log_meff_2=None,
@@ -258,31 +263,31 @@ class halomodel(object):
 					get1h=True, get2h=True):
 
 		if hodparams is not None:
-			self.hm.set_hod(params=hodparams, modeltype=modeltype)
-			self.pk_z = self.hm.hod_power_z(get1h=get1h, get2h=get2h)
+			#self.pk_z = self.hm.hod_power_z(params=hodparams, modeltype=modeltype, get1h=get1h, get2h=get2h)
+			self.pk_z = self.hm.hod_pk_a(hodparams=hodparams)
 		if hodparams2 is not None:
 			self.hm2 = hod_model.halomod_workspace(zs=self.zs)
 			self.hm2.set_hod(params=hodparams2, modeltype=modeltype)
 			self.pk_z_2 = self.hm2.hod_power_z(get1h=get1h, get2h=get2h)
 		# if considering a population of halos with effective mass M rather than full HOD
 		if log_meff is not None:
-			bz = self.hm.bias_relation(M=10 ** log_meff, z=self.zs)
-			self.pk_z = (bz ** 2)[:, None] * self.hm.linpk_z
+			bz = self.bias_relation(M=10 ** log_meff, z=self.zs)
+			self.pk_z = (bz ** 2)[:, None] * self.lin_pk_z
 		if log_meff_2 is not None:
-			self.pk_z_2 = self.hm.linpk_z
-			bz = self.hm.bias_relation(M=10 ** log_meff_2, z=self.zs)
+			self.pk_z_2 = self.lin_pk_z
+			bz = self.bias_relation(M=10 ** log_meff_2, z=self.zs)
 			self.pk_z_2 = (bz ** 2)[:, None] * self.pk_z_2
 		if log_m_min1 is not None:
 			bz = bias_tools.minmass_to_bias_z(log_minmass=log_m_min1, zs=self.zs)
-			self.pk_z = (bz ** 2)[:, None] * self.hm.linpk_z
+			self.pk_z = (bz ** 2)[:, None] * self.lin_pk_z
 		if log_m_min2 is not None:
-			self.pk_z_2 = self.hm.linpk_z
+			self.pk_z_2 = self.lin_pk_z
 			bz = bias_tools.minmass_to_bias_z(log_minmass=log_m_min2, zs=self.zs)
 			self.pk_z_2 = (bz ** 2)[:, None] * self.pk_z_2
 		if bias1 is not None:
-			self.pk_z = (bias1 ** 2) * self.hm.linpk_z
+			self.pk_z = (bias1 ** 2) * self.lin_pk_z
 		if bias2 is not None:
-			self.pk_z_2 = (bias2 ** 2) * self.hm.linpk_z
+			self.pk_z_2 = (bias2 ** 2) * self.lin_pk_z
 
 
 	def get_ang_cf(self, dndz, thetas, dndz_2=None):
@@ -307,7 +312,7 @@ class halomodel(object):
 
 	def get_c_ell_kg(self, dndz, ells):
 		return c_ell_kappa_g(pk_z=self.pk_z, dndz=dndz, ells=ells, k_grid=self.k_grid, chi_z_func=self.chizfunc,
-							 H_z_func=self.hzfunc, lin_pk_z=self.hm.linpk_z, lenskern=self.lens_kernel)
+							 H_z_func=self.hzfunc, lin_pk_z=self.lin_pk_z, lenskern=self.lens_kernel)
 
 	def get_binned_c_ell_kg(self, dndz, ells, ell_bins=None, master_workspace=None):
 		xpower = self.get_c_ell_kg(dndz=dndz, ells=ells)
@@ -318,6 +323,6 @@ class halomodel(object):
 		return binned_xpow
 
 	def get_binned_kappa_prof(self, dndz, theta_bins, l_beam=None, theta_grid=np.radians(np.linspace(0.001, 3, 1000))):
-		kappa_theta = cmb_kappa(pk_z=self.pk_z, dndz=dndz, k_grid=self.k_grid, lin_pk_z=self.hm.linpk_z,
+		kappa_theta = cmb_kappa(pk_z=self.pk_z, dndz=dndz, k_grid=self.k_grid, lin_pk_z=self.lin_pk_z,
 								l_beam=l_beam, theta_grid=theta_grid)
 		return stats.binned_statistic(np.degrees(theta_grid), kappa_theta, statistic='mean', bins=theta_bins)[0]
