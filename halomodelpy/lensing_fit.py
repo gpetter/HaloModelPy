@@ -7,29 +7,29 @@ from . import interpolate_helper
 
 # functions to call for fits
 # take a halo mass or bias factor, return model cross correlation or kappa stack
-def mass_biased_xcorr(foo, mass, ells, dndz, hmobject, ell_bins):
+def mass_biased_xcorr(foo, mass, ells, hmobject, ell_bins):
 	hmobject.set_powspec(log_meff=mass)
-	return hmobject.get_binned_c_ell_kg(dndz=dndz, ells=ells, ell_bins=ell_bins)
+	return hmobject.get_binned_c_ell_kg(ells=ells, ell_bins=ell_bins)
 
 
-def minmass_biased_xcorr(foo, minmass, ells, dndz, hmobject, ell_bins):
+def minmass_biased_xcorr(foo, minmass, ells, hmobject, ell_bins):
 	hmobject.set_powspec(log_m_min1=minmass)
-	return hmobject.get_binned_c_ell_kg(dndz=dndz, ells=ells, ell_bins=ell_bins)
+	return hmobject.get_binned_c_ell_kg(ells=ells, ell_bins=ell_bins)
 
 
-def mass_biased_stack(foo, mass, theta_bins, dndz, hmobject, l_beam=None):
+def mass_biased_stack(foo, mass, theta_bins, hmobject, l_beam=None):
 	hmobject.set_powspec(log_meff=mass)
-	return hmobject.get_binned_kappa_prof(dndz=dndz, theta_bins=theta_bins, l_beam=l_beam)
+	return hmobject.get_binned_kappa_prof(theta_bins=theta_bins, l_beam=l_beam)
 
 
-def biased_xcorr(foo, bias, ells, dndz, hmobject, ell_bins):
+def biased_xcorr(foo, bias, ells, hmobject, ell_bins):
 	hmobject.set_powspec(bias1=bias)
-	return hmobject.get_binned_c_ell_kg(dndz=dndz, ells=ells, ell_bins=ell_bins)
+	return hmobject.get_binned_c_ell_kg(ells=ells, ell_bins=ell_bins)
 
 
-def biased_stack(foo, bias, theta_bins, dndz, hmobject, l_beam=None):
+def biased_stack(foo, bias, theta_bins, hmobject, l_beam=None):
 	hmobject.set_powspec(bias1=bias)
-	return hmobject.get_binned_kappa_prof(dndz=dndz, theta_bins=theta_bins, l_beam=l_beam)
+	return hmobject.get_binned_kappa_prof(theta_bins=theta_bins, l_beam=l_beam)
 
 
 # fit a cross correlation between overdensity and lensing convergence kappa
@@ -37,33 +37,33 @@ def biased_stack(foo, bias, theta_bins, dndz, hmobject, l_beam=None):
 # xcorr is a tuple (cross power, cross power error)
 def fit_xcorr(dndz, xcorr, model='mass'):
 	# initialize halo model
-	hmobj = hm_calcs.halomodel(zs=dndz[0])
+	hmobj = hm_calcs.halomodel(dndz)
 	ells = np.arange(30, 3000)
 	scalebins, scales, corr, err = xcorr['ell_bins'], xcorr['ell'], xcorr['cl'], xcorr['cl_err']
-	unbiasedmod = hmobj.get_c_ell_kg(dndz=dndz, ells=ells)
+	unbiasedmod = hmobj.get_c_ell_kg(ells=ells)
 
 	# fit for a constant effective mass from which bias b(M,z) is calculated
 	if model == 'mass':
-		partialfun = partial(mass_biased_xcorr, ells=ells, dndz=dndz, hmobject=hmobj, ell_bins=scalebins)
+		partialfun = partial(mass_biased_xcorr, ells=ells, hmobject=hmobj, ell_bins=scalebins)
 		popt, pcov = curve_fit(partialfun, np.ones(len(corr)), corr, sigma=err, absolute_sigma=True,
 							   bounds=[11, 14], p0=12.5)
 		hmobj.set_powspec(log_meff=popt[0])
-		bestmodel = (ells, hmobj.get_c_ell_kg(dndz, ells), unbiasedmod)
+		bestmodel = (ells, hmobj.get_c_ell_kg(ells), unbiasedmod)
 
 	# fit for a constant bias across redshift
 	elif model == 'bias':
-		partialfun = partial(biased_xcorr, ells=ells, dndz=dndz, hmobject=hmobj, ell_bins=scalebins)
+		partialfun = partial(biased_xcorr, ells=ells, hmobject=hmobj, ell_bins=scalebins)
 		popt, pcov = curve_fit(partialfun, np.ones(len(corr)), corr, sigma=err, absolute_sigma=True,
 							   bounds=[0.5, 10], p0=2)
 		hmobj.set_powspec(bias1=popt[0])
-		bestmodel = (ells, hmobj.get_c_ell_kg(dndz, ells), unbiasedmod)
+		bestmodel = (ells, hmobj.get_c_ell_kg(ells), unbiasedmod)
 
 	elif model == 'minmass':
-		partialfun = partial(minmass_biased_xcorr, ells=ells, dndz=dndz, hmobject=hmobj, ell_bins=scalebins)
+		partialfun = partial(minmass_biased_xcorr, ells=ells, hmobject=hmobj, ell_bins=scalebins)
 		popt, pcov = curve_fit(partialfun, np.ones(len(corr)), corr, sigma=err, absolute_sigma=True,
 							   bounds=[11, 14], p0=12.)
 		hmobj.set_powspec(bias1=popt[0])
-		bestmodel = (ells, hmobj.get_c_ell_kg(dndz, ells), unbiasedmod)
+		bestmodel = (ells, hmobj.get_c_ell_kg(ells), unbiasedmod)
 
 
 	return popt[0], np.sqrt(pcov)[0][0], bestmodel
@@ -109,7 +109,7 @@ def xcorr_fit_pipeline(dndz, xcorr):
 # dndz is a tuple (center zs, normalized dndz)
 # stack is a tuple (theta_bins, kappa profile, profile error)
 def fit_stack(dndz, stack, model='mass', l_beam=None):
-	hmobj = hm_calcs.halomodel(zs=dndz[0])
+	hmobj = hm_calcs.halomodel(dndz)
 	theta_bins = stack[0]
 	# if no theta bins given, assume fit for peak convergence and get value of model near theta = 0
 	if theta_bins is None:
@@ -117,17 +117,17 @@ def fit_stack(dndz, stack, model='mass', l_beam=None):
 
 	# fit for a constant effective mass from which bias b(M,z) is calculated
 	if model == 'mass':
-		partialfun = partial(mass_biased_stack, theta_bins=theta_bins, dndz=dndz, hmobject=hmobj, l_beam=l_beam)
+		partialfun = partial(mass_biased_stack, theta_bins=theta_bins, hmobject=hmobj, l_beam=l_beam)
 		popt, pcov = curve_fit(partialfun, np.ones(len(theta_bins)-1), stack[1], sigma=stack[2], absolute_sigma=True,
 							   bounds=[11, 14], p0=12.5)
 		hmobj.set_powspec(log_meff=popt[0])
-		bestmodel = (theta_bins, hmobj.get_binned_kappa_prof(dndz=dndz, theta_bins=theta_bins, l_beam=l_beam))
+		bestmodel = (theta_bins, hmobj.get_binned_kappa_prof(theta_bins=theta_bins, l_beam=l_beam))
 
 	# fit for a constant bias across redshift
 	elif model == 'bias':
-		partialfun = partial(biased_stack, theta_bins=theta_bins, dndz=dndz, hmobject=hmobj, l_beam=l_beam)
+		partialfun = partial(biased_stack, theta_bins=theta_bins, hmobject=hmobj, l_beam=l_beam)
 		popt, pcov = curve_fit(partialfun, np.ones(len(stack[0])), stack[1], sigma=stack[2], absolute_sigma=True,
 							   bounds=[0.5, 10], p0=2)
 		hmobj.set_powspec(bias1=popt[0])
-		bestmodel = (theta_bins, hmobj.get_binned_kappa_prof(dndz=dndz, theta_bins=theta_bins, l_beam=l_beam))
+		bestmodel = (theta_bins, hmobj.get_binned_kappa_prof(theta_bins=theta_bins, l_beam=l_beam))
 	return popt[0], np.sqrt(pcov)[0][0], bestmodel
