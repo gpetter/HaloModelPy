@@ -29,9 +29,6 @@ class HOD_model(object):
 							transfer_function=transfer, matter_power_spectrum='linear')
 		self.k_space = hubbleunits.remove_h_from_wavenum(paramobj.k_space)
 
-		#self.cosmo.cosmo.spline_params.ELL_MAX_CORR = 1000000
-		#self.cosmo.cosmo.spline_params.N_ELL_CORR = 5000
-
 		self.mdef = ccl.halos.massdef.MassDef200c(c_m='Duffy08')
 		self.c_m_relation = ccl.halos.concentration.ConcentrationDuffy08(mdef=self.mdef)
 		self.hmf_mod = ccl.halos.hmfunc.MassFuncTinker08(cosmo=self.cosmo, mass_def=self.mdef)
@@ -39,8 +36,6 @@ class HOD_model(object):
 		self.hmc = ccl.halos.halo_model.HMCalculator(cosmo=self.cosmo, massfunc=self.hmf_mod,
 													 hbias=self.bias_mod, mass_def=self.mdef)
 
-		# flip this around since a is inversely propto z, so a is increasing
-		#self.z_space = np.flip(np.linspace(0.1, 4., 16))
 		self.a_space = z_to_a(np.array(z_space))
 
 		# need to figure out what to do with f_c parameter, central fraction
@@ -74,14 +69,18 @@ class HOD_model(object):
 
 
 	# calculate P(k, z) with given hod parameters
-	def hod_pk_a(self, hodparams, hodparams2=None, get_1h=True, get_2h=True):
+	def hod_pk_a(self, hodparams, get_1h=True, get_2h=True):
+		smoothfunc = None
+		if get_1h * get_2h:
+			smoothfunc = self.smooth_1h_2h_transition_func
+
 		return hubbleunits.add_h_to_power(np.array(ccl.halos.halo_model.halomod_power_spectrum(cosmo=self.cosmo,
 								hmc=self.hmc, k=self.k_space,
-								a=self.a_space, prof=self.hod_profile(hodparams), prof2=self.hod_profile(hodparams2),
+								a=self.a_space, prof=self.hod_profile(hodparams),
 								prof_2pt=self.two_pt_hod_profile,
 								supress_1h=self.large_scale_1h_suppresion_func, normprof1=True, normprof2=True,
 								get_1h=get_1h, get_2h=get_2h,
-								smooth_transition=self.smooth_1h_2h_transition_func)))
+								smooth_transition=smoothfunc)))
 
 
 

@@ -7,55 +7,55 @@ from scipy.optimize import curve_fit
 
 
 # a model with a linear power spectrum with a bias corresponding to a constant halo mass
-def mass_biased_cf(foo, mass, scales, dndz, hmobject, angular):
+def mass_biased_cf(foo, mass, scales, hmobject, angular):
 	hmobject.set_powspec(log_meff=mass)
 	if angular:
-		return hmobject.get_binned_ang_cf(dndz, scales)
+		return hmobject.get_binned_ang_cf(scales)
 	else:
-		return hmobject.get_binned_spatial_cf(dndz, scales)
+		return hmobject.get_binned_spatial_cf(scales)
 
 
-def minmass_biased_cf(foo, minmass, scales, dndz, hmobject, angular):
+def minmass_biased_cf(foo, minmass, scales, hmobject, angular):
 	hmobject.set_powspec(log_m_min1=minmass)
 	if angular:
-		return hmobject.get_binned_ang_cf(dndz, scales)
+		return hmobject.get_binned_ang_cf(scales)
 	else:
-		return hmobject.get_binned_spatial_cf(dndz, scales)
+		return hmobject.get_binned_spatial_cf(scales)
 	
 
 # a model with a linear power spectrum with a bias of b
-def biased_cf(foo, bias, scales, dndz, hmobject, angular):
+def biased_cf(foo, bias, scales, hmobject, angular):
 	hmobject.set_powspec(bias1=bias)
 	if angular:
-		return hmobject.get_binned_ang_cf(dndz, scales)
+		return hmobject.get_binned_ang_cf(scales)
 	else:
-		return hmobject.get_binned_spatial_cf(dndz, scales)
+		return hmobject.get_binned_spatial_cf(scales)
 
 
 # same as above for cross correlations
-def mass_biased_xcf(foo, mass1, mass2, dndz1, dndz2, scales, hmobject, angular):
+def mass_biased_xcf(foo, mass1, mass2, scales, hmobject, angular):
 	hmobject.set_powspec(log_meff=mass1, log_meff_2=mass2)
 	if angular:
-		return hmobject.get_binned_ang_cf(dndz1, scales, dndz_2=dndz2)
+		return hmobject.get_binned_ang_cf(scales)
 	else:
-		return hmobject.get_binned_spatial_cf(dndz1, scales, dndz_2=dndz2)
+		return hmobject.get_binned_spatial_cf(scales)
 
 
-def minmass_biased_xcf(foo, minmass1, minmass2, dndz1, dndz2, scales, hmobject, angular):
+def minmass_biased_xcf(foo, minmass1, minmass2, scales, hmobject, angular):
 	hmobject.set_powspec(log_m_min1=minmass1, log_m_min2=minmass2)
 	if angular:
-		return hmobject.get_binned_ang_cf(dndz1, scales, dndz_2=dndz2)
+		return hmobject.get_binned_ang_cf(scales)
 	else:
-		return hmobject.get_binned_spatial_cf(dndz1, scales, dndz_2=dndz2)
+		return hmobject.get_binned_spatial_cf(scales)
 
 
 # a model with a linear power spectrum with a bias of b
-def biased_xcf(foo, bias1, bias2, dndz1, dndz2, scales, hmobject, angular):
+def biased_xcf(foo, bias1, bias2, scales, hmobject, angular):
 	hmobject.set_powspec(bias1=bias1, bias2=bias2)
 	if angular:
-		return hmobject.get_binned_ang_cf(dndz1, scales, dndz_2=dndz2)
+		return hmobject.get_binned_ang_cf(scales)
 	else:
-		return hmobject.get_binned_spatial_cf(dndz1, scales, dndz_2=dndz2)
+		return hmobject.get_binned_spatial_cf(scales)
 
 
 
@@ -63,7 +63,7 @@ def biased_xcf(foo, bias1, bias2, dndz1, dndz2, scales, hmobject, angular):
 # fit either a projected or angular correlation function for an effective bias or halo mass
 def fit_cf(dndz, cf, model='mass'):
 	# initialize halo model
-	hmobj = hm_calcs.halomodel(zs=dndz[0])
+	hmobj = hm_calcs.halomodel(dndz)
 
 	if 'rp' in cf:
 		angular = False
@@ -73,26 +73,26 @@ def fit_cf(dndz, cf, model='mass'):
 		scalebins, corr, err = cf['theta_bins'], cf['w_theta'], cf['w_err']
 	if angular:
 		modscales = np.logspace(-3, 0., 200)
-		unbiasedmod = hmobj.get_ang_cf(dndz, modscales)
+		unbiasedmod = hmobj.get_ang_cf(modscales)
 	else:
 		modscales = np.logspace(-1, 2.3, 200)
-		unbiasedmod = hmobj.get_spatial_cf(dndz, radii=modscales)
+		unbiasedmod = hmobj.get_spatial_cf(modscales)
 	
 	# if fitting for an effective halo mass
 	if model == 'mass':
-		partialfun = partial(mass_biased_cf, scales=scalebins, dndz=dndz, hmobject=hmobj, angular=angular)
+		partialfun = partial(mass_biased_cf, scales=scalebins, hmobject=hmobj, angular=angular)
 		popt, pcov = curve_fit(partialfun, None, corr, sigma=err, absolute_sigma=True,
 							bounds=[11, 14], p0=12.5)
 		hmobj.set_powspec(log_meff=popt[0])
 
 	# if fitting for an effective bias
 	elif model == 'bias':
-		partialfun = partial(biased_cf, scales=scalebins, dndz=dndz, hmobject=hmobj, angular=angular)
+		partialfun = partial(biased_cf, scales=scalebins, hmobject=hmobj, angular=angular)
 		popt, pcov = curve_fit(partialfun, None, corr, sigma=err, absolute_sigma=True,
 							bounds=[0.5, 30], p0=2)
 		hmobj.set_powspec(bias1=popt[0])
 	elif model == 'minmass':
-		partialfun = partial(minmass_biased_cf, scales=scalebins, dndz=dndz, hmobject=hmobj, angular=angular)
+		partialfun = partial(minmass_biased_cf, scales=scalebins, hmobject=hmobj, angular=angular)
 		popt, pcov = curve_fit(partialfun, None, corr, sigma=err, absolute_sigma=True,
 							   bounds=[11, 14], p0=12.)
 		hmobj.set_powspec(log_m_min1=popt[0])
@@ -104,9 +104,9 @@ def fit_cf(dndz, cf, model='mass'):
 		centervals, lowerrs, higherrs = mcmc.sample_cf_space
 	if angular:
 		# return the best fit model on a grid for plotting purposes
-		bestmodel = (modscales, hmobj.get_ang_cf(dndz, modscales), unbiasedmod)
+		bestmodel = (modscales, hmobj.get_ang_cf(modscales), unbiasedmod)
 	else:
-		bestmodel = (modscales, hmobj.get_spatial_cf(dndz, radii=modscales), unbiasedmod)
+		bestmodel = (modscales, hmobj.get_spatial_cf(radii=modscales), unbiasedmod)
 
 	return popt[0], np.sqrt(pcov)[0][0], bestmodel
 
@@ -114,7 +114,7 @@ def fit_cf(dndz, cf, model='mass'):
 # fit either a projected or angular correlation function for an effective bias or halo mass
 def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 	# initialize halo model
-	hmobj = hm_calcs.halomodel(zs=dndz_x[0])
+	hmobj = hm_calcs.halomodel(dndz1=dndz_auto, dndz2=dndz_x)
 
 	if 'rp' in cf_x:
 		angular = False
@@ -126,10 +126,10 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 
 	if angular:
 		modscales = np.logspace(-3, 0., 200)
-		unbiasedmod = hmobj.get_ang_cf(dndz_x, modscales, dndz_2=dndz_auto)
+		unbiasedmod = hmobj.get_ang_cf(modscales)
 	else:
 		modscales = np.logspace(-1, 2.3, 200)
-		unbiasedmod = hmobj.get_spatial_cf(dndz_x, radii=modscales, dndz_2=dndz_auto)
+		unbiasedmod = hmobj.get_spatial_cf(radii=modscales)
 
 	autofit = fit_cf(dndz=dndz_auto, cf=autocf, model=model)
 	par_auto, err_auto = autofit[0], autofit[1]
@@ -162,9 +162,9 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 
 	if angular:
 		# return the best fit model on a grid for plotting purposes
-		bestmodel = (modscales, hmobj.get_ang_cf(dndz_x, modscales, dndz_2=dndz_auto), unbiasedmod)
+		bestmodel = (modscales, hmobj.get_ang_cf(modscales), unbiasedmod)
 	else:
-		bestmodel = (modscales, hmobj.get_spatial_cf(dndz_x, radii=modscales, dndz_2=dndz_auto), unbiasedmod)
+		bestmodel = (modscales, hmobj.get_spatial_cf(radii=modscales), unbiasedmod)
 
 	# Figure out how to incorporate errors on reference population
 	return popt[0], np.sqrt(pcov)[0][0], bestmodel
