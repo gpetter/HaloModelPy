@@ -65,6 +65,8 @@ class HOD_model(object):
 
 	# set up density profile with HOD parameters
 	def hod_profile(self, hodparams):
+		if hodparams is None:
+			return None
 		mmin, sigm, m0, m1, alpha = hodparams
 		mmin, m0, m1 = hubbleunits.remove_h_from_logmass([mmin, m0, m1])
 		return ccl.halos.profiles.HaloProfileHOD(c_M_relation=self.c_m_relation, lMmin_0=mmin,
@@ -72,13 +74,14 @@ class HOD_model(object):
 
 
 	# calculate P(k, z) with given hod parameters
-	def hod_pk_a(self, hodparams):
-		#a_arr = z_to_a(zs)
+	def hod_pk_a(self, hodparams, hodparams2=None, get_1h=True, get_2h=True):
 		return hubbleunits.add_h_to_power(np.array(ccl.halos.halo_model.halomod_power_spectrum(cosmo=self.cosmo,
 								hmc=self.hmc, k=self.k_space,
-		                        a=self.a_space, prof=self.hod_profile(hodparams), prof_2pt=self.two_pt_hod_profile,
-		                        supress_1h=self.large_scale_1h_suppresion_func, normprof1=True, normprof2=True,
-		                        smooth_transition=self.smooth_1h_2h_transition_func)))
+								a=self.a_space, prof=self.hod_profile(hodparams), prof2=self.hod_profile(hodparams2),
+								prof_2pt=self.two_pt_hod_profile,
+								supress_1h=self.large_scale_1h_suppresion_func, normprof1=True, normprof2=True,
+								get_1h=get_1h, get_2h=get_2h,
+								smooth_transition=self.smooth_1h_2h_transition_func)))
 
 
 

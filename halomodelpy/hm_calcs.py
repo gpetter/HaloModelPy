@@ -1,14 +1,14 @@
 import numpy as np
 import astropy.units as u
 import mcfit
+import healpy as hp
 from scipy.interpolate import interp1d
 import astropy.constants as const
-from . import hod_model
+#from . import hod_model
 import astropy.cosmology.units as cu
 from functools import partial
 from scipy import stats
 from scipy.special import j0
-import healpy as hp
 from . import redshift_helper
 from . import params
 from . import bias_tools
@@ -66,12 +66,16 @@ def Hubble_z(zs, littleh_units=True):
 	else:
 		return apcosmo.H(zs).value
 
+def kaiser_bias(b, zs):
+	f_grow = col_cosmo.Om(zs) ** 0.56
+	return (b ** 2 + 2./3 * b * f_grow + 1. / 5 * f_grow ** 2)
+
 
 # project power spectra as a function of redshift to an angular correlation function
 # can do a cross-correlation function if second power spectrum and redshift distribution given
 # the input power spectra should already be biased wrt dark matter if necessary
 # make sure P(k), k, chi, H have uniform little h units
-def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_zfunc, H_zfunc, pk_z_2=None, dndz_2=None):
+def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_zfunc, H_zfunc, dndz_2=None):
 	dndz = redshift_helper.norm_z_dist(dndz)
 	if dndz_2 is not None:
 		dndz_2 = redshift_helper.norm_z_dist(dndz_2)
@@ -83,16 +87,14 @@ def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_zfunc, H_zfunc, pk_z_2=None, 
 	# if doing a cross-correlation between two power spectra, (like two HOD P(k,z)'s),
 	# we want to integrate the product of their square roots
 	# and integrate over the product of their redshift distributions
-	if pk_z_2 is not None:
-		tot_pk_z = np.sqrt(pk_z) * np.sqrt(pk_z_2)
+	if dndz_2 is not None:
 		dndz_prod = dndz[1] * dndz_2[1]
 	else:
-		tot_pk_z = pk_z
 		dndz_prod = dndz[1] ** 2
 
 	# Hankel transform power spectra at different redshifts to correlation functions which we will project to angular
 	# space
-	thetachis, dipomp_int = mcfit.Hankel(k_grid, lowring=True)(tot_pk_z, axis=1, extrap=True)
+	thetachis, dipomp_int = mcfit.Hankel(k_grid, lowring=True)(pk_z, axis=1, extrap=True)
 
 	# 2D grid of thetas * chi(z) to interpolate model power spectra onto
 	input_theta_chis = np.outer(chi_z, thetas)
@@ -116,7 +118,7 @@ def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_zfunc, H_zfunc, pk_z_2=None, 
 	return 1 / (2 * np.pi) * np.trapz(differentials * np.transpose(interped_dipomp), x=dndz[0], axis=1)
 
 
-def pk_z_to_cl_gg(pk_z, dndz, ells, k_grid, chi_zfunc, H_zfunc, pk_z_2=None, dndz_2=None):
+def pk_z_to_cl_gg(pk_z, dndz, ells, k_grid, chi_zfunc, H_zfunc, dndz_2=None):
 	dndz = redshift_helper.norm_z_dist(dndz)
 	if dndz_2 is not None:
 		dndz_2 = redshift_helper.norm_z_dist(dndz_2)
@@ -125,11 +127,9 @@ def pk_z_to_cl_gg(pk_z, dndz, ells, k_grid, chi_zfunc, H_zfunc, pk_z_2=None, dnd
 	# if doing a cross-correlation between two power spectra, (like two HOD P(k,z)'s),
 	# we want to integrate the product of their square roots
 	# and integrate over the product of their redshift distributions
-	if pk_z_2 is not None:
-		tot_pk_z = np.sqrt(pk_z) * np.sqrt(pk_z_2)
+	if dndz_2 is not None:
 		dndz_prod = dndz[1] * dndz_2[1]
 	else:
-		tot_pk_z = pk_z
 		dndz_prod = dndz[1] ** 2
 	ks = np.outer(1. / chi_z_func(dndz[0]), (ells + 1 / 2.))
 
@@ -139,14 +139,14 @@ def pk_z_to_cl_gg(pk_z, dndz, ells, k_grid, chi_zfunc, H_zfunc, pk_z_2=None, dnd
 
 	interped_power = []
 	for j in range(len(dndz[0])):
-		pk = tot_pk_z[j]
+		pk = pk_z[j]
 		interped_power.append(10 ** interp1d(np.log10(k_grid), np.log10(pk))(np.log10(ks[j])))
 
 	return np.trapz(differentials * np.transpose(interped_power), x=dndz[0], axis=1)
 
 # Fourier transform input power spectra to correlation functions, convert to projected CFs wp(rp) if desired,
 # and project to observable for given redshift distribution(s)
-def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, pk_z_2=None, dndz_2=None, projected=True):
+def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, dndz_2=None, projected=True):
 	dndz = redshift_helper.norm_z_dist(dndz)
 	if dndz_2 is not None:
 		dndz_2 = redshift_helper.norm_z_dist(dndz_2)
@@ -154,21 +154,17 @@ def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, pk_z_2=None, dndz_2=None, projected=
 	# if doing a cross-correlation between two power spectra, (like two HOD P(k,z)'s),
 	# we want to integrate the product of their square roots
 	# and integrate over the product of their redshift distributions
-	if pk_z_2 is not None:
-		tot_pk_z = np.sqrt(pk_z) * np.sqrt(pk_z_2)
+	if dndz_2 is not None:
 		dndz_prod = np.sqrt(dndz[1] * dndz_2[1])
 	else:
-		tot_pk_z = pk_z
 		dndz_prod = dndz[1]
 
 	if projected:
-		#import abel
-		# am i sure this is okay for the projected correlation function? am i actually getting it at r_p?
 		#xis = np.array(abel.direct.direct_transform(xis, r=rgrid, direction='forward', backend='python'))
-		rgrid, xis = mcfit.Hankel(k_grid, lowring=True)(tot_pk_z, axis=1, extrap=True)
+		rgrid, xis = mcfit.Hankel(k_grid, lowring=True)(pk_z, axis=1, extrap=True)
 		xis /= (2 * np.pi)
 	else:
-		rgrid, xis = mcfit.P2xi(k_grid, lowring=True)(tot_pk_z, axis=1, extrap=True)
+		rgrid, xis = mcfit.P2xi(k_grid, lowring=True)(pk_z, axis=1, extrap=True)
 
 
 	# trick to make interpolation work for logarithmically varying xi (propto r^-2)
@@ -253,57 +249,54 @@ class halomodel(object):
 		self.bias_relation = paramobj.bias_relation
 		self.chizfunc = partial(chi_z_func, littleh_units=littleh_units)
 		self.hzfunc = partial(Hubble_z, littleh_units=littleh_units)
-
-		self.pk_z_2 = None
 		self.lens_kernel = lensing_kernel(lens_zs=self.zs, chi_z_func=chi_z_func, H0=self.hzfunc(0))
 
 	# reset the power spectrum according to an HOD if provided, or an effective mass-biased spectrum
-	def set_powspec(self, hodparams=None, modeltype=None, hodparams2=None, log_meff=None, log_meff_2=None,
+	def set_powspec(self, hodparams=None, hodparams2=None, log_meff=None, log_meff_2=None,
 					bias1=None, bias2=None, log_m_min1=None, log_m_min2=None,
 					get1h=True, get2h=True):
 
 		if hodparams is not None:
 			#self.pk_z = self.hm.hod_power_z(params=hodparams, modeltype=modeltype, get1h=get1h, get2h=get2h)
-			self.pk_z = self.hm.hod_pk_a(hodparams=hodparams)
-		if hodparams2 is not None:
-			self.hm2 = hod_model.halomod_workspace(zs=self.zs)
-			self.hm2.set_hod(params=hodparams2, modeltype=modeltype)
-			self.pk_z_2 = self.hm2.hod_power_z(get1h=get1h, get2h=get2h)
+			if hodparams2 is not None:
+				self.pk_z = self.hm.hod_pk_a(hodparams=hodparams, hodparams2=hodparams2, get_1h=get1h, get_2h=get2h)
+			self.pk_z = self.hm.hod_pk_a(hodparams=hodparams, get_1h=get1h, get_2h=get2h)
 		# if considering a population of halos with effective mass M rather than full HOD
-		if log_meff is not None:
+		elif log_meff is not None:
 			bz = self.bias_relation(M=10 ** log_meff, z=self.zs)
-			self.pk_z = (bz ** 2)[:, None] * self.lin_pk_z
-		if log_meff_2 is not None:
-			self.pk_z_2 = self.lin_pk_z
-			bz = self.bias_relation(M=10 ** log_meff_2, z=self.zs)
-			self.pk_z_2 = (bz ** 2)[:, None] * self.pk_z_2
-		if log_m_min1 is not None:
+			bz2 = bz
+			if log_meff_2 is not None:
+				bz2 = self.bias_relation(M=10 ** log_meff_2, z=self.zs)
+			self.pk_z = (bz * bz2)[:, None] * self.lin_pk_z
+		# if halos with masses > M_min
+		elif log_m_min1 is not None:
 			bz = bias_tools.minmass_to_bias_z(log_minmass=log_m_min1, zs=self.zs)
-			self.pk_z = (bz ** 2)[:, None] * self.lin_pk_z
-		if log_m_min2 is not None:
-			self.pk_z_2 = self.lin_pk_z
-			bz = bias_tools.minmass_to_bias_z(log_minmass=log_m_min2, zs=self.zs)
-			self.pk_z_2 = (bz ** 2)[:, None] * self.pk_z_2
-		if bias1 is not None:
-			self.pk_z = (bias1 ** 2) * self.lin_pk_z
-		if bias2 is not None:
-			self.pk_z_2 = (bias2 ** 2) * self.lin_pk_z
+			bz2 = bz
+			if log_m_min2 is not None:
+				bz2 = bias_tools.minmass_to_bias_z(log_minmass=log_m_min2, zs=self.zs)
+			self.pk_z = (bz * bz2)[:, None] * self.lin_pk_z
+		# or a simple constant bias with redshift
+		elif bias1 is not None:
+			bz, bz2 = bias1, bias1
+			if bias2 is not None:
+				bz2 = bias2
+			self.pk_z = (bz * bz2) * self.lin_pk_z
 
 
 	def get_ang_cf(self, dndz, thetas, dndz_2=None):
 		return pk_z_to_ang_cf(pk_z=self.pk_z, dndz=dndz, thetas=thetas, k_grid=self.k_grid,
-							  chi_zfunc=self.chizfunc, H_zfunc=self.hzfunc, pk_z_2=self.pk_z_2, dndz_2=dndz_2)
+							  chi_zfunc=self.chizfunc, H_zfunc=self.hzfunc, dndz_2=dndz_2)
 
 	def get_c_ell_gg(self, dndz, ells, dndz_2=None):
 		return pk_z_to_cl_gg(pk_z=self.pk_z, dndz=dndz, ells=ells, k_grid=self.k_grid, chi_zfunc=self.chizfunc,
-							 H_zfunc=self.hzfunc, pk_z_2=self.pk_z_2, dndz_2=dndz_2)
+							 H_zfunc=self.hzfunc, dndz_2=dndz_2)
 
 	def get_binned_ang_cf(self, dndz, theta_bins, dndz_2=None, thetagrid=np.logspace(-3, 0, 100)):
 		wtheta = self.get_ang_cf(dndz=dndz, thetas=thetagrid, dndz_2=dndz_2)
 		return stats.binned_statistic(thetagrid, wtheta, statistic='mean', bins=theta_bins)[0]
 
 	def get_spatial_cf(self, dndz, radii=np.logspace(-1., 1., 300), dndz_2=None, projected=True):
-		return pk_z_to_xi_r(pk_z=self.pk_z, dndz=dndz, radii=radii, k_grid=self.k_grid, pk_z_2=self.pk_z_2,
+		return pk_z_to_xi_r(pk_z=self.pk_z, dndz=dndz, radii=radii, k_grid=self.k_grid,
 							dndz_2=dndz_2, projected=projected)
 
 	def get_binned_spatial_cf(self, dndz, radius_bins, dndz_2=None, sepgrid=np.logspace(-1., 1.6, 300), projected=True):
