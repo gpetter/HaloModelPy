@@ -6,6 +6,8 @@ paramobj = params.param_obj()
 col_cosmo = paramobj.col_cosmo
 apcosmo = paramobj.apcosmo
 
+# convert between naming conventions of colossus and CCL
+ccl_name_dict = {'tinker10': 'Tinker10', 'tinker08': 'Tinker08'}
 
 def z_to_a(zs):
 	return 1. / (1. + zs)
@@ -29,10 +31,10 @@ class HOD_model(object):
 							transfer_function=transfer, matter_power_spectrum='linear')
 		self.k_space = hubbleunits.remove_h_from_wavenum(paramobj.k_space)
 
-		self.mdef = ccl.halos.massdef.MassDef200c(c_m='Duffy08')
-		self.c_m_relation = ccl.halos.concentration.ConcentrationDuffy08(mdef=self.mdef)
-		self.hmf_mod = ccl.halos.hmfunc.MassFuncTinker08(cosmo=self.cosmo, mass_def=self.mdef)
-		self.bias_mod = ccl.halos.hbias.HaloBiasTinker10(cosmo=self.cosmo, mass_def=self.mdef)
+		self.mdef = ccl.halos.massdef.MassDef.from_name(paramobj.mass_def)(c_m=paramobj.c_m)
+		self.c_m_relation = ccl.halos.concentration.concentration_from_name(paramobj.c_m)(mdef=self.mdef)
+		self.hmf_mod = ccl.halos.hmfunc.mass_function_from_name(ccl_name_dict[paramobj.hmfmodel])(cosmo=self.cosmo, mass_def=self.mdef)
+		self.bias_mod = ccl.halos.hbias.halo_bias_from_name(ccl_name_dict[paramobj.biasmodel])(cosmo=self.cosmo, mass_def=self.mdef)
 		self.hmc = ccl.halos.halo_model.HMCalculator(cosmo=self.cosmo, massfunc=self.hmf_mod,
 													 hbias=self.bias_mod, mass_def=self.mdef)
 

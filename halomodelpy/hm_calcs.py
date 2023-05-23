@@ -3,7 +3,6 @@ import astropy.units as u
 import mcfit
 from scipy.interpolate import interp1d
 import astropy.constants as const
-#from . import hod_model
 import astropy.cosmology.units as cu
 from functools import partial
 from scipy import stats
