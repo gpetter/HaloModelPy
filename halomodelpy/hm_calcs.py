@@ -100,7 +100,7 @@ def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_zfunc, H_zfunc):
 
 	dz_d_chi = (H_z / const.c.to(u.km / u.s).value)
 	# product of redshift distributions, and dz/dchi
-	differentials = dz_d_chi * dndz[1]
+	differentials = dz_d_chi * dndz[1] ** 2
 
 	# integrate over redshift kernel to get w(theta) a la Dipompeo+2017
 	return 1 / (2 * np.pi) * np.trapz(differentials * np.transpose(interped_dipomp), x=dndz[0], axis=1)
