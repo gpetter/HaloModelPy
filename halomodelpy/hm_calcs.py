@@ -213,7 +213,7 @@ class halomodel(object):
 		# if doing a cross correlationm, want the redshift distribution overlap of two samples
 		if dndz2 is not None:
 			dndz2 = redshift_helper.norm_z_dist(dndz2)
-			self.dndz = np.sqrt(self.dndz[1] * dndz2[1])
+			self.dndz = (self.zs, np.sqrt(self.dndz[1] * dndz2[1]))
 
 		#self.hm = hod_model.halomod_workspace(zs=self.zs, linpow=linpow)
 		self.hm = ccl_tools.HOD_model(self.zs, transfer=transfer)
@@ -224,6 +224,7 @@ class halomodel(object):
 		self.chizfunc = partial(chi_z_func, littleh_units=littleh_units)
 		self.hzfunc = partial(Hubble_z, littleh_units=littleh_units)
 		self.lens_kernel = lensing_kernel(lens_zs=self.zs, chi_z_func=chi_z_func, H0=self.hzfunc(0))
+		self.bzs = np.ones_like(self.zs)
 
 	# reset the power spectrum according to an HOD if provided, or an effective mass-biased spectrum
 	def set_powspec(self, hodparams=None, hodparams2=None, log_meff=None, log_meff_2=None,
@@ -243,6 +244,7 @@ class halomodel(object):
 			if log_meff_2 is not None:
 				bz2 = self.bias_relation(M=10 ** log_meff_2, z=self.zs)
 			self.pk_z = (bz * bz2)[:, None] * self.lin_pk_z
+			self.bzs = np.sqrt(bz * bz2)
 		# if halos with masses > M_min
 		elif log_m_min1 is not None:
 			bz = bias_tools.minmass_to_bias_z(log_minmass=log_m_min1, zs=self.zs)
@@ -250,14 +252,17 @@ class halomodel(object):
 			if log_m_min2 is not None:
 				bz2 = bias_tools.minmass_to_bias_z(log_minmass=log_m_min2, zs=self.zs)
 			self.pk_z = (bz * bz2)[:, None] * self.lin_pk_z
+			self.bzs = np.sqrt(bz * bz2)
 		# or a simple constant bias with redshift
 		elif bias1 is not None:
 			bz, bz2 = bias1, bias1
 			if bias2 is not None:
 				bz2 = bias2
 			self.pk_z = (bz * bz2) * self.lin_pk_z
+			self.bzs = np.sqrt(bz * bz2) * np.ones_like(self.zs)
 		else:
 			self.pk_z = self.lin_pk_z
+			self.bzs = np.ones_like(self.zs)
 
 
 	def get_ang_cf(self, thetas):
@@ -295,3 +300,18 @@ class halomodel(object):
 		kappa_theta = cmb_kappa(pk_z=self.pk_z, dndz=self.dndz, k_grid=self.k_grid, lin_pk_z=self.lin_pk_z,
 								l_beam=l_beam, theta_grid=theta_grid)
 		return stats.binned_statistic(np.degrees(theta_grid), kappa_theta, statistic='mean', bins=theta_bins)[0]
+
+
+	def get_multipole(self, s, ell=0):
+		pkob = self.hm.biased_pk2dobj(self.bzs)
+		xi_s_z = []
+		for j in range(len(self.zs)):
+			xi_s_z.append(self.hm.xi_s(z=self.zs[j], s=s, ell=ell, b=self.bzs[j], pk_a=pkob))
+		return np.trapz(self.dndz[1] * np.transpose(xi_s_z), x=self.zs, axis=1)
+
+	def get_xi_rp_pi(self, rp, pi):
+		pkob = self.hm.biased_pk2dobj(self.bzs)
+		xi_2d_z = []
+		for j in range(len(self.zs)):
+			xi_2d_z.append(self.hm.xi_rp_pi(z=self.zs[j], rps=rp, pis=pi, b=self.bzs[j], pk_a=pkob))
+		return np.trapz(self.dndz[1] * np.transpose(xi_2d_z), x=self.zs, axis=1)

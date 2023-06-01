@@ -8,7 +8,7 @@ class param_obj(object):
 	def __init__(self):
 		self.logk_min = -3
 		self.logk_max = 2
-		self.nks = 512
+		self.nks = 128
 
 		self.cmb_z = 1090.
 

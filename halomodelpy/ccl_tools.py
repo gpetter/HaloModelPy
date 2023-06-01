@@ -25,6 +25,7 @@ def hubble_parameter(zs, cosmo, littleh):
 
 class HOD_model(object):
 	def __init__(self, z_space, transfer='eisenstein_hu'):
+		self.z_space = z_space
 		self.littleh = col_cosmo.h
 		self.cosmo = ccl.Cosmology(Omega_c=apcosmo.Odm0, Omega_b=apcosmo.Ob0,
 							h=self.littleh, n_s=col_cosmo.ns, sigma8=col_cosmo.sigma8,
@@ -91,6 +92,29 @@ class HOD_model(object):
 		for this_a in self.a_space:
 			pk_as.append(ccl.power.linear_matter_power(cosmo=self.cosmo, k=self.k_space, a=this_a))
 		return hubbleunits.add_h_to_power(np.array(pk_as))
+
+
+
+	def biased_pk2dobj(self, bs):
+		b_pk_z = np.transpose(np.transpose(hubbleunits.remove_h_from_power(self.linpk_z)) * bs ** 2)
+		return ccl.pk2d.Pk2D(a_arr=np.flip(self.a_space), lk_arr=np.log(self.k_space), pk_arr=np.log(np.flipud(b_pk_z)))
+
+
+
+	def xi_rp_pi(self, z, rps, pis, b=1, pk_a=None):
+		rps, pis = hubbleunits.remove_h_from_scale(rps), hubbleunits.remove_h_from_scale(pis)
+		f_grow = col_cosmo.Om(z) ** 0.56
+		xi = []
+		for pi in pis:
+			xi.append(ccl.correlations.correlation_pi_sigma(self.cosmo, z_to_a(z), f_grow / b, pi, rps, p_of_k_a=pk_a))
+		return np.transpose(xi).ravel()
+
+	def xi_s(self, z, s, ell=0, b=1, pk_a=None):
+		s = hubbleunits.remove_h_from_scale(s)
+		f_grow = col_cosmo.Om(z) ** 0.56
+		return ccl.correlations.correlation_multipole(cosmo=self.cosmo,
+					a=z_to_a(z), beta=f_grow / b, l=ell, s=s, p_of_k_a=pk_a)
+
 
 
 	# ccl doesn't have built in tracer class for HOD

@@ -58,7 +58,16 @@ def biased_xcf(foo, bias1, bias2, scales, hmobject, angular):
 		return hmobject.get_binned_spatial_cf(scales)
 
 
+def hod_3param_cf(foo, mmin, m1, alpha, scales, hmobject, angular):
+	hmobject.set_powspec(hodparams=[mmin, 0.0001, mmin, m1, alpha])
+	if angular:
+		return hmobject.get_binned_ang_cf(scales)
+	else:
+		return hmobject.get_binned_spatial_cf(scales)
 
+
+def hod_2param_cf(foo, mmin, m1, scales, hmobject, angular, alpha=1.):
+	return hod_3param_cf(foo, mmin, m1, alpha, scales, hmobject, angular)
 
 # fit either a projected or angular correlation function for an effective bias or halo mass
 def fit_cf(dndz, cf, model='mass'):
