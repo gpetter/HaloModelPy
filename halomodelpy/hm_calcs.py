@@ -6,7 +6,7 @@ import astropy.constants as const
 import astropy.cosmology.units as cu
 from functools import partial
 from scipy import stats
-from scipy.special import j0
+from scipy.special import j0, legendre
 from . import redshift_helper
 from . import params
 from . import bias_tools
@@ -64,9 +64,28 @@ def Hubble_z(zs, littleh_units=True):
 	else:
 		return apcosmo.H(zs).value
 
-def kaiser_bias(b, zs):
-	f_grow = col_cosmo.Om(zs) ** 0.56
-	return (b ** 2 + 2./3 * b * f_grow + 1. / 5 * f_grow ** 2)
+def beta_param(bs, zs):
+	return col_cosmo.Om(zs) ** 0.56 / bs
+
+
+def hamilton_j_interp(xi, sgrid, ss, n):
+	jx = []
+	for s in ss:
+		maxidx = np.argmin(np.abs(s - sgrid))
+		jx.append(np.trapz(xi[:, :maxidx] * sgrid[:maxidx] ** (n-1), x=sgrid[:maxidx]))
+	lin_interp = interp1d(np.log10(ss), np.log10(jx), axis=0)
+	return lambda zz: np.transpose(np.power(10.0, lin_interp(np.log10(zz))))
+
+def xi_monopole(xi, beta):
+	return (1 + 2/3 * beta + 1/5 * beta ** 2) * xi
+
+def xi_quadrupole(s, xi, beta, j3, bz):
+	return (4/3 * beta + 4/7 * beta ** 2) * (xi - 3 * (bz ** 2 * j3(s)) / s ** 3)
+
+def xi_hexadecapole(s, xi, beta, j3, j5, bz):
+	return 8/35 * beta ** 2 * (xi + 15/(2 * s ** 3) * (bz ** 2 * j3(s)) - 35/(2 * s ** 5) * (bz ** 2 * j5(s)))
+
+
 
 
 # project power spectra as a function of redshift to an angular correlation function
@@ -139,6 +158,45 @@ def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, projected=True):
 	interpedxis = interp1d(rgrid, xis * rgrid)(radii) / radii
 
 	return np.trapz(dndz[1] * np.transpose(interpedxis), x=dndz[0], axis=1)
+
+def pk_z_to_xi_rp_pi(pk_z, dndz, beta_z, bz, rps, pis, k_grid, j3, j5):
+	rp_grid, pi_grid = np.meshgrid(rps, pis)
+	s_grid = np.sqrt(rp_grid ** 2 + pi_grid ** 2).ravel()
+	mu_grid = rp_grid.ravel() / s_grid
+
+	rgrid, xis = mcfit.P2xi(k_grid, lowring=True)(pk_z, axis=1, extrap=True)
+	interpedxis = interp1d(rgrid, xis * rgrid)(s_grid) / s_grid
+	beta_z = beta_z[:, np.newaxis]
+	bz = bz[:, np.newaxis]
+
+
+	xi0 = xi_monopole(interpedxis, beta_z)
+	xi2 = xi_quadrupole(s_grid, interpedxis, beta_z, j3, bz)
+	xi4 = xi_hexadecapole(s_grid, interpedxis, beta_z, j3, j5, bz)
+
+	xirppi = legendre(0)(mu_grid) * xi0 + legendre(2)(mu_grid) * xi2 + legendre(4)(mu_grid) * xi4
+	return np.trapz(dndz[1] * np.transpose(xirppi), x=dndz[0], axis=1).reshape(len(rps), len(pis)).ravel()
+
+
+
+
+
+def pk_z_to_multipole(pk_z, dndz, beta_z, s, k_grid, j3, j5, bz, ell=0):
+	rgrid, xis = mcfit.P2xi(k_grid, lowring=True)(pk_z, axis=1, extrap=True)
+	interpedxis = interp1d(rgrid, xis * rgrid)(s) / s
+	beta_z = beta_z[:, np.newaxis]
+	bz = bz[:, np.newaxis]
+
+	if ell == 0:
+		xi_s = xi_monopole(interpedxis, beta_z)
+	elif ell == 2:
+		xi_s = xi_quadrupole(s, interpedxis, beta_z, j3, bz)
+	elif ell == 4:
+		xi_s = xi_hexadecapole(s, interpedxis, beta_z, j3, j5, bz)
+	else:
+		xi_s = None
+	return np.trapz(dndz[1] * np.transpose(xi_s), x=dndz[0], axis=1)
+
 
 
 # get cross spectrm C_ell between galaxy overdensity and gravitational lensing
@@ -226,6 +284,10 @@ class halomodel(object):
 		self.lens_kernel = lensing_kernel(lens_zs=self.zs, chi_z_func=chi_z_func, H0=self.hzfunc(0))
 		self.bzs = np.ones_like(self.zs)
 
+		rgrid, xis = mcfit.P2xi(self.k_grid, lowring=True)(self.lin_pk_z, axis=1, extrap=True)
+		self.j3 = hamilton_j_interp(xis, rgrid, rgrid, 3)
+		self.j5 = hamilton_j_interp(xis, rgrid, rgrid, 5)
+
 	# reset the power spectrum according to an HOD if provided, or an effective mass-biased spectrum
 	def set_powspec(self, hodparams=None, hodparams2=None, log_meff=None, log_meff_2=None,
 					bias1=None, bias2=None, log_m_min1=None, log_m_min2=None,
@@ -265,6 +327,7 @@ class halomodel(object):
 			self.bzs = np.ones_like(self.zs)
 
 
+
 	def get_ang_cf(self, thetas):
 		return pk_z_to_ang_cf(pk_z=self.pk_z, dndz=self.dndz, thetas=thetas, k_grid=self.k_grid,
 							  chi_zfunc=self.chizfunc, H_zfunc=self.hzfunc)
@@ -301,8 +364,16 @@ class halomodel(object):
 								l_beam=l_beam, theta_grid=theta_grid)
 		return stats.binned_statistic(np.degrees(theta_grid), kappa_theta, statistic='mean', bins=theta_bins)[0]
 
-
 	def get_multipole(self, s, ell=0):
+		return pk_z_to_multipole(pk_z=self.pk_z, dndz=self.dndz,
+								 beta_z=beta_param(self.bzs, self.zs), bz=self.bzs,
+								 s=s, k_grid=self.k_grid, j3=self.j3, j5=self.j5, ell=ell)
+
+	def get_xi_rp_pi(self, rp, pi):
+		return pk_z_to_xi_rp_pi(pk_z=self.pk_z, dndz=self.dndz, beta_z=beta_param(self.bzs, self.zs), bz=self.bzs,
+								rps=rp, pis=pi, k_grid=self.k_grid, j3=self.j3, j5=self.j5)
+
+	"""def get_multipole(self, s, ell=0):
 		pkob = self.hm.biased_pk2dobj(self.bzs)
 		xi_s_z = []
 		for j in range(len(self.zs)):
@@ -314,4 +385,5 @@ class halomodel(object):
 		xi_2d_z = []
 		for j in range(len(self.zs)):
 			xi_2d_z.append(self.hm.xi_rp_pi(z=self.zs[j], rps=rp, pis=pi, b=self.bzs[j], pk_a=pkob))
-		return np.trapz(self.dndz[1] * np.transpose(xi_2d_z), x=self.zs, axis=1)
+		return np.trapz(self.dndz[1] * np.transpose(xi_2d_z), x=self.zs, axis=1)"""
+
