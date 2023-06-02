@@ -6,11 +6,13 @@ import astropy.constants as const
 import astropy.cosmology.units as cu
 from functools import partial
 from scipy import stats
+from scipy.ndimage import gaussian_filter1d
 from scipy.special import j0, legendre
 from . import redshift_helper
 from . import params
 from . import bias_tools
 from . import ccl_tools
+from . import hubbleunits
 paramobj = params.param_obj()
 col_cosmo = paramobj.col_cosmo
 apcosmo = paramobj.apcosmo
@@ -54,7 +56,7 @@ def lensing_kernel(lens_zs, chi_z_func=apcosmo.comoving_distance, H0=apcosmo.H0,
 
 def chi_z_func(zs, littleh_units=True):
 	if littleh_units:
-		return apcosmo.comoving_distance(zs).to(u.Mpc / cu.littleh, cu.with_H0(apcosmo.H0)).value
+		return hubbleunits.add_h_to_scale(apcosmo.comoving_distance(zs).value)
 	return apcosmo.comoving_distance(zs).value
 
 
@@ -64,17 +66,23 @@ def Hubble_z(zs, littleh_units=True):
 	else:
 		return apcosmo.H(zs).value
 
+def d_chi_dz(zs, chizfunc, littleh_units=True):
+	chis = chizfunc(zs, littleh_units=littleh_units)
+	dchidz = np.gradient(chis, zs)
+	return lambda zz: interp1d(zs, dchidz)(zz)
+
+
 def beta_param(bs, zs):
-	return col_cosmo.Om(zs) ** 0.56 / bs
+	return apcosmo.Om(zs) ** 0.56 / bs
 
-
+# needed for calculating quadrupole or hexadecapole. Eq. 6.65 in Mo, vanden Bosch, White textbook
 def hamilton_j_interp(xi, sgrid, ss, n):
 	jx = []
 	for s in ss:
 		maxidx = np.argmin(np.abs(s - sgrid))
 		jx.append(np.trapz(xi[:, :maxidx] * sgrid[:maxidx] ** (n-1), x=sgrid[:maxidx]))
-	lin_interp = interp1d(np.log10(ss), np.log10(jx), axis=0)
-	return lambda zz: np.transpose(np.power(10.0, lin_interp(np.log10(zz))))
+	lin_interp = interp1d(np.log10(ss), jx, axis=0)
+	return lambda zz: np.transpose(lin_interp(np.log10(zz)))
 
 def xi_monopole(xi, beta):
 	return (1 + 2/3 * beta + 1/5 * beta ** 2) * xi
@@ -92,8 +100,7 @@ def xi_hexadecapole(s, xi, beta, j3, j5, bz):
 # can do a cross-correlation function if second power spectrum and redshift distribution given
 # the input power spectra should already be biased wrt dark matter if necessary
 # make sure P(k), k, chi, H have uniform little h units
-def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_zfunc, H_zfunc):
-	chi_z, H_z = chi_zfunc(dndz[0]), H_zfunc(dndz[0])
+def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_z, H_z):
 
 	# convert input thetas to radians from degrees
 	thetas = (thetas * u.deg).to('radian').value
@@ -125,8 +132,7 @@ def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_zfunc, H_zfunc):
 	return 1 / (2 * np.pi) * np.trapz(differentials * np.transpose(interped_dipomp), x=dndz[0], axis=1)
 
 
-def pk_z_to_cl_gg(pk_z, dndz, ells, k_grid, chi_zfunc, H_zfunc):
-	chi_z, H_z = chi_zfunc(dndz[0]), H_zfunc(dndz[0])
+def pk_z_to_cl_gg(pk_z, dndz, ells, k_grid, chi_z, H_z):
 
 	ks = np.outer(1. / chi_z_func(dndz[0]), (ells + 1 / 2.))
 
@@ -159,7 +165,7 @@ def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, projected=True):
 
 	return np.trapz(dndz[1] * np.transpose(interpedxis), x=dndz[0], axis=1)
 
-def pk_z_to_xi_rp_pi(pk_z, dndz, beta_z, bz, rps, pis, k_grid, j3, j5):
+def pk_z_to_xi_rp_pi(pk_z, dndz, beta_z, bz, rps, pis, k_grid, j3, j5, sigchi=None):
 	rp_grid, pi_grid = np.meshgrid(rps, pis)
 	s_grid = np.sqrt(rp_grid ** 2 + pi_grid ** 2).ravel()
 	mu_grid = rp_grid.ravel() / s_grid
@@ -175,7 +181,19 @@ def pk_z_to_xi_rp_pi(pk_z, dndz, beta_z, bz, rps, pis, k_grid, j3, j5):
 	xi4 = xi_hexadecapole(s_grid, interpedxis, beta_z, j3, j5, bz)
 
 	xirppi = legendre(0)(mu_grid) * xi0 + legendre(2)(mu_grid) * xi2 + legendre(4)(mu_grid) * xi4
-	return np.trapz(dndz[1] * np.transpose(xirppi), x=dndz[0], axis=1).reshape(len(rps), len(pis)).ravel()
+
+	xirppi = xirppi.reshape((len(dndz[0]), len(rps), len(pis)))
+
+	if sigchi is not None:
+		# assume equal and linear spacing of pi and rp bins
+		sigpix = 1 / (pis[1] - pis[0]) * sigchi
+		#newxirppi = []
+		#for j in range(len(sigchi)):
+		#	newxirppi.append(gaussian_filter1d(xirppi[j], sigchi[j], axis=0))
+		#xirppi = np.array(newxirppi)
+		xirppi = gaussian_filter1d(xirppi, sigpix, axis=2)
+
+	return np.trapz(dndz[1] * np.transpose(xirppi, axes=[1, 2, 0]), x=dndz[0], axis=2).ravel()
 
 
 
@@ -200,11 +218,11 @@ def pk_z_to_multipole(pk_z, dndz, beta_z, s, k_grid, j3, j5, bz, ell=0):
 
 
 # get cross spectrm C_ell between galaxy overdensity and gravitational lensing
-def c_ell_kappa_g(pk_z, dndz, ells, k_grid, chi_z_func, H_z_func, lin_pk_z, lenskern):
-	qsokern = H_z_func(dndz[0]) / const.c.to(u.km / u.s).value * dndz[1]
+def c_ell_kappa_g(pk_z, dndz, ells, k_grid, chi_z, H_z, lin_pk_z, lenskern):
+	qsokern = H_z / const.c.to(u.km / u.s).value * dndz[1]
 
-	integrand = (const.c.to(u.km / u.s).value * lenskern * qsokern / ((chi_z_func(dndz[0]) ** 2) * H_z_func(dndz[0])))
-	ks = np.outer(1. / chi_z_func(dndz[0]), (ells + 1 / 2.))
+	integrand = (const.c.to(u.km / u.s).value * lenskern * qsokern / ((chi_z ** 2) * H_z))
+	ks = np.outer(1. / chi_z, (ells + 1 / 2.))
 
 	# P(k) is b^2 P_lin, so sqrt(P(k)) * sqrt(P_lin) = b * P_lin
 	pk_z = np.sqrt(pk_z) * np.sqrt(lin_pk_z)
@@ -284,6 +302,11 @@ class halomodel(object):
 		self.lens_kernel = lensing_kernel(lens_zs=self.zs, chi_z_func=chi_z_func, H0=self.hzfunc(0))
 		self.bzs = np.ones_like(self.zs)
 
+		self.chi_z = chi_z_func(self.zs, littleh_units=littleh_units)
+		self.Hz = Hubble_z(self.zs, littleh_units=littleh_units)
+
+		self.dchidz = const.c.to('km/s').value / self.hzfunc(self.zs)
+
 		rgrid, xis = mcfit.P2xi(self.k_grid, lowring=True)(self.lin_pk_z, axis=1, extrap=True)
 		self.j3 = hamilton_j_interp(xis, rgrid, rgrid, 3)
 		self.j5 = hamilton_j_interp(xis, rgrid, rgrid, 5)
@@ -330,11 +353,11 @@ class halomodel(object):
 
 	def get_ang_cf(self, thetas):
 		return pk_z_to_ang_cf(pk_z=self.pk_z, dndz=self.dndz, thetas=thetas, k_grid=self.k_grid,
-							  chi_zfunc=self.chizfunc, H_zfunc=self.hzfunc)
+							  chi_z=self.chi_z, H_z=self.Hz)
 
 	def get_c_ell_gg(self, ells):
-		return pk_z_to_cl_gg(pk_z=self.pk_z, dndz=self.dndz, ells=ells, k_grid=self.k_grid, chi_zfunc=self.chizfunc,
-							 H_zfunc=self.hzfunc)
+		return pk_z_to_cl_gg(pk_z=self.pk_z, dndz=self.dndz, ells=ells, k_grid=self.k_grid,
+							 chi_z=self.chi_z, H_z=self.Hz)
 
 	def get_binned_ang_cf(self, theta_bins, thetagrid=np.logspace(-3, 0, 100)):
 		wtheta = self.get_ang_cf(thetas=thetagrid)
@@ -348,8 +371,8 @@ class halomodel(object):
 		return stats.binned_statistic(sepgrid, wp, statistic='mean', bins=radius_bins)[0]
 
 	def get_c_ell_kg(self, ells):
-		return c_ell_kappa_g(pk_z=self.pk_z, dndz=self.dndz, ells=ells, k_grid=self.k_grid, chi_z_func=self.chizfunc,
-							 H_z_func=self.hzfunc, lin_pk_z=self.lin_pk_z, lenskern=self.lens_kernel)
+		return c_ell_kappa_g(pk_z=self.pk_z, dndz=self.dndz, ells=ells, k_grid=self.k_grid,
+							 chi_z=self.chi_z, H_z=self.Hz, lin_pk_z=self.lin_pk_z, lenskern=self.lens_kernel)
 
 	def get_binned_c_ell_kg(self, ells, ell_bins=None, master_workspace=None):
 		xpower = self.get_c_ell_kg(ells=ells)
@@ -369,9 +392,12 @@ class halomodel(object):
 								 beta_z=beta_param(self.bzs, self.zs), bz=self.bzs,
 								 s=s, k_grid=self.k_grid, j3=self.j3, j5=self.j5, ell=ell)
 
-	def get_xi_rp_pi(self, rp, pi):
+	def get_xi_rp_pi(self, rp, pi, sigz=None):
+		sig_chi = None
+		if sigz is not None:
+			sig_chi = np.average(self.dchidz * sigz)
 		return pk_z_to_xi_rp_pi(pk_z=self.pk_z, dndz=self.dndz, beta_z=beta_param(self.bzs, self.zs), bz=self.bzs,
-								rps=rp, pis=pi, k_grid=self.k_grid, j3=self.j3, j5=self.j5)
+								rps=rp, pis=pi, k_grid=self.k_grid, j3=self.j3, j5=self.j5, sigchi=sig_chi)
 
 	"""def get_multipole(self, s, ell=0):
 		pkob = self.hm.biased_pk2dobj(self.bzs)
