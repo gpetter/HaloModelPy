@@ -145,7 +145,7 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 
 	# if fitting for an effective halo mass
 	if model == 'mass':
-		partialfun = partial(mass_biased_xcf, mass2=par_auto, dndz1=dndz_x, dndz2=dndz_auto, scales=scalebins,
+		partialfun = partial(mass_biased_xcf, mass2=par_auto, scales=scalebins,
 							 hmobject=hmobj, angular=angular)
 		popt, pcov = curve_fit(partialfun, None, xcorr, sigma=xerr, absolute_sigma=True,
 							   bounds=[11, 14], p0=12.5)
@@ -153,13 +153,13 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 
 	# if fitting for an effective bias
 	elif model == 'bias':
-		partialfun = partial(biased_xcf, bias2=par_auto, dndz1=dndz_x, dndz2=dndz_auto, scales=scalebins,
+		partialfun = partial(biased_xcf, bias2=par_auto, scales=scalebins,
 							 hmobject=hmobj, angular=angular)
 		popt, pcov = curve_fit(partialfun, None, xcorr, sigma=xerr, absolute_sigma=True,
 							   bounds=[0.5, 30], p0=2)
 		hmobj.set_powspec(bias1=popt[0])
 	elif model == 'minmass':
-		partialfun = partial(minmass_biased_xcf, minmass2=par_auto, dndz1=dndz_x, dndz2=dndz_auto, scales=scalebins,
+		partialfun = partial(minmass_biased_xcf, minmass2=par_auto, scales=scalebins,
 							 hmobject=hmobj, angular=angular)
 		popt, pcov = curve_fit(partialfun, None, xcorr, sigma=xerr, absolute_sigma=True,
 							   bounds=[11, 14], p0=12.)
