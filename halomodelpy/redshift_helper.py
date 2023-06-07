@@ -14,4 +14,4 @@ def dndz_from_z_list(zs, nbins, zrange=None):
 	dndz, zbins = np.histogram(zs, bins=nbins, density=True, range=zrange)
 	zcenters = interpolate_helper.bin_centers(zbins, method='mean')
 	dndz = dndz / np.trapz(dndz, x=zcenters)
-	return (zcenters, dndz)
+	return (np.array(zcenters, dtype=np.float64), np.array(dndz, dtype=np.float64))

@@ -290,7 +290,10 @@ class halomodel(object):
 		if dndz2 is not None:
 			dndz2 = redshift_helper.norm_z_dist(dndz2)
 			self.dndz = (self.zs, np.sqrt(self.dndz[1] * dndz2[1]))
-
+			# no need to do calculations where dn/dz = 0 in case of non-overlapping distributions
+			nonzeroidx = np.nonzero(self.dndz[1])
+			self.zs = self.zs[nonzeroidx]
+			self.dndz = (self.zs, self.dndz[1][nonzeroidx])
 		#self.hm = hod_model.halomod_workspace(zs=self.zs, linpow=linpow)
 		self.hm = ccl_tools.HOD_model(self.zs, transfer=transfer)
 		self.lin_pk_z = self.hm.linpk_z
@@ -359,14 +362,16 @@ class halomodel(object):
 		return pk_z_to_cl_gg(pk_z=self.pk_z, dndz=self.dndz, ells=ells, k_grid=self.k_grid,
 							 chi_z=self.chi_z, H_z=self.Hz)
 
-	def get_binned_ang_cf(self, theta_bins, thetagrid=np.logspace(-3, 0, 100)):
+	def get_binned_ang_cf(self, theta_bins):
+		thetagrid = np.logspace(np.log10(np.min(theta_bins)), np.log10(np.max(theta_bins)), 100)
 		wtheta = self.get_ang_cf(thetas=thetagrid)
 		return stats.binned_statistic(thetagrid, wtheta, statistic='mean', bins=theta_bins)[0]
 
 	def get_spatial_cf(self, radii=np.logspace(-1., 1., 300), projected=True):
 		return pk_z_to_xi_r(pk_z=self.pk_z, dndz=self.dndz, radii=radii, k_grid=self.k_grid, projected=projected)
 
-	def get_binned_spatial_cf(self, radius_bins, sepgrid=np.logspace(-1., 1.6, 300), projected=True):
+	def get_binned_spatial_cf(self, radius_bins, projected=True):
+		sepgrid = np.logspace(np.log10(np.min(radius_bins)), np.log10(np.max(radius_bins)), 100)
 		wp = self.get_spatial_cf(radii=sepgrid, projected=projected)
 		return stats.binned_statistic(sepgrid, wp, statistic='mean', bins=radius_bins)[0]
 
