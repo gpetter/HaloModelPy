@@ -165,7 +165,7 @@ def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, projected=True):
 
 	return np.trapz(dndz[1] * np.transpose(interpedxis), x=dndz[0], axis=1)
 
-def pk_z_to_xi_rp_pi(pk_z, dndz, beta_z, bz, rps, pis, k_grid, j3, j5, sigchi=None):
+def pk_z_to_xi_rp_pi(pk_z, dndz, beta_z, bz, rps, pis, k_grid, j3, j5, sigchi=None, mono=True, quad=True, hex=True):
 	rp_grid, pi_grid = np.meshgrid(rps, pis)
 	s_grid = np.sqrt(rp_grid ** 2 + pi_grid ** 2).ravel()
 	mu_grid = rp_grid.ravel() / s_grid
@@ -175,10 +175,18 @@ def pk_z_to_xi_rp_pi(pk_z, dndz, beta_z, bz, rps, pis, k_grid, j3, j5, sigchi=No
 	beta_z = beta_z[:, np.newaxis]
 	bz = bz[:, np.newaxis]
 
-
-	xi0 = xi_monopole(interpedxis, beta_z)
-	xi2 = xi_quadrupole(s_grid, interpedxis, beta_z, j3, bz)
-	xi4 = xi_hexadecapole(s_grid, interpedxis, beta_z, j3, j5, bz)
+	if mono:
+		xi0 = xi_monopole(interpedxis, beta_z)
+	else:
+		xi0 = interpedxis
+	if quad:
+		xi2 = xi_quadrupole(s_grid, interpedxis, beta_z, j3, bz)
+	else:
+		xi2 = np.zeros_like(interpedxis)
+	if hex:
+		xi4 = xi_hexadecapole(s_grid, interpedxis, beta_z, j3, j5, bz)
+	else:
+		xi4 = np.zeros_like(interpedxis)
 
 	xirppi = legendre(0)(mu_grid) * xi0 + legendre(2)(mu_grid) * xi2 + legendre(4)(mu_grid) * xi4
 
@@ -194,6 +202,22 @@ def pk_z_to_xi_rp_pi(pk_z, dndz, beta_z, bz, rps, pis, k_grid, j3, j5, sigchi=No
 		xirppi = gaussian_filter1d(xirppi, sigpix, axis=2)
 
 	return np.trapz(dndz[1] * np.transpose(xirppi, axes=[1, 2, 0]), x=dndz[0], axis=2).ravel()
+
+
+def anisotropic2multipole(xirppi, rps, pis, s_bins, wedges=None):
+	rp_grid, pi_grid = np.meshgrid(rps, pis)
+	s_grid = np.sqrt(rp_grid ** 2 + pi_grid ** 2).ravel()
+	mu_grid = rp_grid.ravel() / s_grid
+	if wedges is not None:
+		xis = []
+		wedge_bins = np.linspace(-1e-6, 1., wedges+1)
+		for j in range(wedges):
+			inwedge = np.where((mu_grid > wedge_bins[j]) & (mu_grid <= wedge_bins[j+1]))
+			xis.append(stats.binned_statistic(s_grid[inwedge], xirppi[inwedge], statistic='mean', bins=s_bins)[0])
+		return xis
+	else:
+		return stats.binned_statistic(s_grid, xirppi, statistic='mean', bins=s_bins)[0]
+
 
 
 
@@ -397,13 +421,18 @@ class halomodel(object):
 								 beta_z=beta_param(self.bzs, self.zs), bz=self.bzs,
 								 s=s, k_grid=self.k_grid, j3=self.j3, j5=self.j5, ell=ell)
 
-	def get_xi_rp_pi(self, rp, pi, sigz=None):
+	def get_xi_rp_pi(self, rp, pi, sigz=None, mono=True, quad=True, hex=True):
 		sig_chi = None
 		if sigz is not None:
 			sig_chi = np.average(self.dchidz * sigz)
 		return pk_z_to_xi_rp_pi(pk_z=self.pk_z, dndz=self.dndz, beta_z=beta_param(self.bzs, self.zs), bz=self.bzs,
-								rps=rp, pis=pi, k_grid=self.k_grid, j3=self.j3, j5=self.j5, sigchi=sig_chi)
+								rps=rp, pis=pi, k_grid=self.k_grid, j3=self.j3, j5=self.j5, sigchi=sig_chi,
+								mono=mono, quad=quad, hex=hex)
 
+	def get_xi_s(self, rp, pi, s_bins, sigz=None, wedges=None, mono=True, quad=True, hex=True):
+		xirppi = self.get_xi_rp_pi(rp=rp, pi=pi, sigz=sigz, mono=mono, quad=quad, hex=hex)
+		xi_s = anisotropic2multipole(xirppi=xirppi, rps=rp, pis=pi, s_bins=s_bins, wedges=wedges)
+		return xi_s
 	"""def get_multipole(self, s, ell=0):
 		pkob = self.hm.biased_pk2dobj(self.bzs)
 		xi_s_z = []
