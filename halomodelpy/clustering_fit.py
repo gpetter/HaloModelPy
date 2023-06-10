@@ -88,6 +88,7 @@ def fit_cf(dndz, cf, model='mass'):
 		unbiasedmod = hmobj.get_spatial_cf(modscales)
 	# dont use nans or zero errors in the fit
 	goodidx = np.where(np.isfinite(corr) & (np.isfinite(err)) & (err > 0))[0]
+	corr, err = corr[goodidx], err[goodidx]
 	
 	# if fitting for an effective halo mass
 	if model == 'mass':
@@ -137,6 +138,7 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 
 	# dont use nans or zero errors in the fit
 	goodidx = np.where(np.isfinite(xcorr) & (np.isfinite(xerr)) & (xerr > 0))[0]
+	xcorr, xerr = xcorr[goodidx], xerr[goodidx]
 
 	if angular:
 		modscales = np.logspace(-3, 0., 200)
