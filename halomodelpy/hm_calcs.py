@@ -312,7 +312,12 @@ class halomodel(object):
 		self.zs = self.dndz[0]
 		# if doing a cross correlationm, want the redshift distribution overlap of two samples
 		if dndz2 is not None:
+
 			dndz2 = redshift_helper.norm_z_dist(dndz2)
+			if not np.array_equal(self.zs, dndz2[0]):
+				print(self.zs)
+				print(dndz2[0])
+				print('Redshift distribution grids do not match')
 			self.dndz = (self.zs, np.sqrt(self.dndz[1] * dndz2[1]))
 			# no need to do calculations where dn/dz = 0 in case of non-overlapping distributions
 			nonzeroidx = np.nonzero(self.dndz[1])
@@ -387,7 +392,8 @@ class halomodel(object):
 							 chi_z=self.chi_z, H_z=self.Hz)
 
 	def get_binned_ang_cf(self, theta_bins):
-		thetagrid = np.logspace(np.log10(np.min(theta_bins)), np.log10(np.max(theta_bins)), 100)
+		# get unbinned cf with padding
+		thetagrid = np.logspace(np.log10(np.min(theta_bins)/2.), np.log10(np.max(theta_bins)*2.), 100)
 		wtheta = self.get_ang_cf(thetas=thetagrid)
 		return stats.binned_statistic(thetagrid, wtheta, statistic='mean', bins=theta_bins)[0]
 

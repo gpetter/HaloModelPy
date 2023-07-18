@@ -17,6 +17,8 @@ def growthrate(m, z, wantmean=True):
     return a * ((m/1e12)**(1.1)) * (1 + b*z)*apcosmo.efunc(z)
 
 
+
+
 def evolve_halo_mass(logmh_init, z_init, z_fin, wantmean=True):
     """
     Evolve a halo mass from an initial to final redshift using the mean or median growth rate of Fakhouri+2010
@@ -52,3 +54,23 @@ def evolve_halo_bias(b_init, z_init, z_fin, wantmean=True):
     b_z = bias_tools.mass2bias(logms, zgrid)
 
     return np.array(zgrid), np.array(b_z)
+
+
+def halo_formation_rate(log_m, zs):
+    """
+    Number density of halos formed per year at different redshifts
+    :param log_m:
+    :param zs:
+    :return:
+    """
+
+    # chronological ages of universe
+    times = np.flip(apcosmo.age(zs)).to('yr').value
+
+    dens = []
+    for z in zs:
+        dens.append(paramobj.hmf(10 ** log_m, z))
+    dens = np.flip(dens)
+
+    # number formed per year is hmf(t)-hmf(t-dt) in time interval
+    return np.gradient(dens, times)

@@ -1,11 +1,8 @@
 import numpy as np
 import os
 import astropy.units as u
-from colossus.cosmology import cosmology
-import astropy.cosmology.units as cu
-cosmo = cosmology.setCosmology('planck18')
-apcosmo = cosmo.toAstropy()
-from colossus.lss import mass_function
+from . import cosmo
+from . import hubbleunits
 
 
 
@@ -51,10 +48,17 @@ def int_lf_over_z_and_l(dndL, dndz, nu=None):
     # integrate over redshift distribution
     dens = np.trapz(np.array(ints_at_zs)*dndz, x=zs) * (u.Mpc**-3)
     # convert to little h units for comparision with HMF
-    dens_hunit = dens.to((cu.littleh/u.Mpc)**3, cu.with_H0(apcosmo.H0)).value
+    dens_hunit = hubbleunits.add_h_to_density(dens.value)
     os.chdir(curdir)
     return dens_hunit
 
+def int_hmf(z, logminmass, massgrid=np.logspace(11, 16, 5000)):
+    mfunc = cosmo.hmf_z(np.log10(massgrid), z)
+    # number of halos more massive than M is integral of HMF from M to inf
+    occupiedidxs = np.where(np.log10(massgrid) > logminmass)
+    mfunc, newgrid = mfunc[occupiedidxs], massgrid[occupiedidxs]
+    int_at_z = np.trapz(mfunc, x=np.log(newgrid))
+    return int_at_z
 
 #
 def int_hmf_z(dndz, logminmass, massgrid=np.logspace(11, 16, 5000)):
@@ -75,12 +79,8 @@ def int_hmf_z(dndz, logminmass, massgrid=np.logspace(11, 16, 5000)):
     ints_at_zs = []
     # for each redshift in grid
     for z in zs:
-        # get HMF(z)
-        mfunc_so = mass_function.massFunction(massgrid, z, mdef='200c', model='tinker08', q_out='dndlnM')
-        # number of halos more massive than M is integral of HMF from M to inf
-        occupiedidxs = np.where(np.log10(massgrid) > logminmass)
-        mfunc_so, newgrid = mfunc_so[occupiedidxs], massgrid[occupiedidxs]
-        ints_at_zs.append(np.trapz(mfunc_so, x=np.log(newgrid)))
+
+        ints_at_zs.append(int_hmf(z, logminmass, massgrid=massgrid))
 
     return np.trapz(np.array(ints_at_zs)*dndz, x=zs)
 

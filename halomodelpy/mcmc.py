@@ -3,31 +3,31 @@ import numpy as np
 from . import hm_calcs
 
 
+paramdict = {'M': 0, 'sigM': 1, 'M0': 2, 'M1':3 , 'alpha': 4}
+
+default_hod = np.array([12.5, 1e-3, 12.5, 13.5, 1.])
+
+def parse_params(theta, freeparam_ids):
+	hodparams = np.copy(default_hod)
+	for j in range(len(freeparam_ids)):
+		hodparams[paramdict[freeparam_ids[j]]] = theta[j]
+	return hodparams
+
+
 
 
 # log prior function
-def ln_prior(theta):
-	if len(theta) == 1:
-		mmin = theta
-		if (mmin > 11) & (mmin < 14):
-			return 0.
-		else:
-			return -np.inf
-	elif len(theta) == 2:
-		mmin, alpha = theta
-		# make flat priors on minimum mass and satellite power law
-		if (mmin > 11.) & (mmin < 14.) & (alpha > 0) & (alpha < 2):
-			return 0.
-		else:
-			return -np.inf
-	elif len(theta) == 3:
-		mmin, alpha, m1 = theta
-		# make flat priors on minimum mass and satellite power law
-		if (mmin > 11.) & (mmin < 14.) & (alpha > 0) & (alpha < 2) & (m1 > mmin) & (m1 < 15.):
-			return 0.
-		else:
-
-			return -np.inf
+def ln_prior(hodparams):
+	mmin = hodparams[0]
+	if (mmin < 11) | (mmin < 14):
+		return -np.inf
+	m1 = hodparams[paramdict['M1']]
+	if (m1 < 12) | (m1 > 15):
+		return -np.inf
+	alpha = hodparams[paramdict['alpha']]
+	if (alpha < 0.1) | (alpha > 3):
+		return -np.inf
+	return 0.
 
 
 
@@ -47,15 +47,17 @@ def ln_likelihood(residual, yerr):
 
 
 # log probability is prior plus likelihood
-def ln_prob_cf(theta, cf, dndz, modeltype, hmobj):
-	anglebins, y, yerr = cf
-	zs, dndz = dndz
-	prior = ln_prior(theta)
+def ln_prob_cf(theta, cf, dndz, freeparam_ids, hmobj):
+	anglebins = cf['theta_bins']
+	y = cf['w_theta']
+	yerr = cf['w_err']
+	hodparams = parse_params(theta, freeparam_ids)
+	prior = ln_prior(hodparams)
 
-	hmobj.set_powspec(hodparams=theta, modeltype=modeltype)
+	hmobj.set_powspec(hodparams=hodparams)
 	# keep track of derived parameters like satellite fraction, effective bias, effective mass
 	#derived = (hod_model.derived_parameters(zs, dndz, theta, modeltype))
-	derived = hmobj.hm.derived_parameters(dndz=dndz)
+	#derived = hmobj.hm.derived_parameters(dndz=dndz)
 
 
 
@@ -63,7 +65,7 @@ def ln_prob_cf(theta, cf, dndz, modeltype, hmobj):
 	#modelprediction = clusteringModel.angular_corr_func_in_bins(anglebins, zs=zs, dn_dz_1=dndz,
 	#                                                            hodparams=theta,
 	#                                                            hodmodel=modeltype)
-	modelprediction = hmobj.get_binned_ang_cf(dndz=(zs, dndz), theta_bins=anglebins)
+	modelprediction = hmobj.get_binned_ang_cf(theta_bins=anglebins)
 
 	# residual is data - model
 	residual = y - modelprediction
@@ -72,7 +74,8 @@ def ln_prob_cf(theta, cf, dndz, modeltype, hmobj):
 	prob = prior + likely
 
 	# return log_prob, along with derived parameters for this parameter set
-	return (prob,) + derived
+	#return (prob,) + derived
+	return prob
 
 
 # log probability is prior plus likelihood
@@ -100,25 +103,20 @@ def ln_prob_lens(theta, ell_bins, y, yerr, zs, dndz, modeltype, hmobj):
 
 
 
-def sample_cf_space(nwalkers, niter, cf, dndz, modeltype, initial_params=None, pool=None):
+def sample_cf_space(nwalkers, niter, cf, dndz, freeparam_ids, initial_params=None, pool=None):
 
-	ndim = int(modeltype[0])
-	blobs_dtype = [("f_sat", float), ("b_eff", float), ("m_eff", float)]
-	if ndim == 1:
-		blobs_dtype = blobs_dtype[1:]
+	ndim = len(freeparam_ids)
+	#blobs_dtype = [("f_sat", float), ("b_eff", float), ("m_eff", float)]
+	#if ndim == 1:
+	#	blobs_dtype = blobs_dtype[1:]
 
-	halomod_obj = hm_calcs.halomodel(zs=dndz[0])
+	halomod_obj = hm_calcs.halomodel(dndz)
 
 
 	sampler = emcee.EnsembleSampler(nwalkers, ndim, ln_prob_cf,
-									args=[cf, dndz, modeltype, halomod_obj],
-									blobs_dtype=blobs_dtype,
+									args=[cf, dndz, freeparam_ids, halomod_obj],
 	                                pool=pool)
 
-
-	if initial_params is None:
-		initial_params = [12.5, 0.5, 13.5]
-		initial_params = initial_params[:ndim]
 
 	# start walkers near least squares fit position with random gaussian offsets
 	pos = np.array(initial_params) + 2e-1 * np.random.normal(size=(sampler.nwalkers, sampler.ndim))
@@ -127,10 +125,10 @@ def sample_cf_space(nwalkers, niter, cf, dndz, modeltype, initial_params=None, p
 
 
 	flatchain = sampler.get_chain(discard=10, flat=True)
-	blobs = sampler.get_blobs(discard=10, flat=True)
+	#blobs = sampler.get_blobs(discard=10, flat=True)
 
 
-	if ndim > 1:
+	"""if ndim > 1:
 		flatchain = np.hstack((
 			flatchain,
 			np.atleast_2d(blobs['f_sat']).T,
@@ -142,12 +140,13 @@ def sample_cf_space(nwalkers, niter, cf, dndz, modeltype, initial_params=None, p
 			flatchain,
 			np.atleast_2d(blobs['b_eff']).T,
 			np.atleast_2d(blobs['m_eff']).T
-		))
+		))"""
 
 	#np.array(flatchain).dump('results/chains/%s.npy' % binnum)
 
 	centervals, lowerrs, higherrs = [], [], []
-	for i in range(ndim + len(blobs_dtype)):
+	#for i in range(ndim + len(blobs_dtype)):
+	for i in range(ndim):
 		post = np.percentile(flatchain[:, i], [16, 50, 84])
 		q = np.diff(post)
 		centervals.append(post[1])

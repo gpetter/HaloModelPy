@@ -38,3 +38,9 @@ def add_h_to_scale(r):
 
 def remove_h_from_scale(r):
 	return r / littleh
+
+def remove_h_from_density(dens):
+	return dens * littleh ** 3
+
+def add_h_to_density(dens):
+	return dens / (littleh ** 3)

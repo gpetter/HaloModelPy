@@ -17,21 +17,36 @@ def dndz_from_z_list(zs, nbins, zrange=None):
 	dndz = dndz / np.trapz(dndz, x=zcenters)
 	return np.array(zcenters, dtype=np.float64), np.array(dndz, dtype=np.float64)
 
-def fill_in_coarse_dndz(dndz, newnbins):
+def fill_in_coarse_dndz(dndz, newzs):
 	zs, dn_dz = dndz
-	newzs = np.linspace(np.min(zs), np.max(zs), newnbins)
-	newdndz = np.interp(newzs, zs, dn_dz)
-	return newzs, newdndz
 
-def spline_dndz(dndz, newzs, spline_k=3):
+	newdndz = np.interp(newzs, zs, dn_dz)
+	return norm_z_dist((newzs, newdndz))
+
+def spline_dndz(dndz, spline_k=4, smooth=0.05):
+
 	zs = list(dndz[0])
+
 	dn_dz = list(dndz[1])
-	zs.insert(0, 0)
+	zs.insert(0, zs[0] - 0.01)
 	dn_dz.insert(0, 0)
-	zs.append(0)
+	zs.append(zs[-1] + 0.01)
 	dn_dz.append(0)
 
-	spl = interp.InterpolatedUnivariateSpline(zs, dn_dz, k=spline_k)
+	spl = interp.UnivariateSpline(zs, dn_dz, k=spline_k, s=smooth)
+	return spl
 
-	return np.array(newzs), np.array(spl(newzs))
+	#return norm_z_dist((np.array(zcenters), np.array(spl(zcenters))))
 
+def spl_interp_dndz(dndz, newzs, spline_k=4, smooth=0.05):
+	spl = spline_dndz(dndz, spline_k=spline_k, smooth=smooth)
+	return norm_z_dist((np.array(newzs), np.array(spl(newzs))))
+
+def effective_z(dndz, dndz2=None):
+	if dndz2 is not None:
+		if not np.array_equal(dndz[0], dndz2[0]):
+			print(dndz[0])
+			print(dndz2[0])
+			print('Redshift distribution grids do not match')
+		dndz = (dndz[0], dndz[1]*dndz2[1])
+	return np.average(dndz[0], weights=dndz[1])

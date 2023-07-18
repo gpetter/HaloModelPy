@@ -73,6 +73,7 @@ def hod_2param_cf(foo, mmin, m1, scales, hmobject, angular, alpha=1.):
 def fit_cf(dndz, cf, model='mass'):
 	# initialize halo model
 	hmobj = hm_calcs.halomodel(dndz)
+	outdict = {}
 
 	if 'rp' in cf:
 		angular = False
@@ -81,7 +82,7 @@ def fit_cf(dndz, cf, model='mass'):
 		angular = True
 		scalebins, corr, err = cf['theta_bins'], cf['w_theta'], cf['w_err']
 	if angular:
-		modscales = np.logspace(-3, 0., 200)
+		modscales = np.logspace(-2.5, -.5, 200)
 		unbiasedmod = hmobj.get_ang_cf(modscales)
 	else:
 		modscales = np.logspace(-1, 2.3, 200)
@@ -96,6 +97,7 @@ def fit_cf(dndz, cf, model='mass'):
 		popt, pcov = curve_fit(partialfun, None, corr, sigma=err, absolute_sigma=True,
 							bounds=[11, 14], p0=12.5)
 		hmobj.set_powspec(log_meff=popt[0])
+		outdict['M'], outdict['sigM'] = popt[0], np.sqrt(pcov)[0][0]
 
 	# if fitting for an effective bias
 	elif model == 'bias':
@@ -103,11 +105,14 @@ def fit_cf(dndz, cf, model='mass'):
 		popt, pcov = curve_fit(partialfun, None, corr, sigma=err, absolute_sigma=True,
 							bounds=[0.5, 30], p0=2)
 		hmobj.set_powspec(bias1=popt[0])
+		outdict['b'], outdict['sigb'] = popt[0], np.sqrt(pcov)[0][0]
+
 	elif model == 'minmass':
 		partialfun = partial(minmass_biased_cf, scales=scalebins, hmobject=hmobj, angular=angular, idx=goodidx)
 		popt, pcov = curve_fit(partialfun, None, corr, sigma=err, absolute_sigma=True,
 							   bounds=[11, 14], p0=12.)
 		hmobj.set_powspec(log_m_min1=popt[0])
+		outdict['Mmin'], outdict['sigMmin'] = popt[0], np.sqrt(pcov)[0][0]
 
 
 
@@ -116,11 +121,15 @@ def fit_cf(dndz, cf, model='mass'):
 		centervals, lowerrs, higherrs = mcmc.sample_cf_space
 	if angular:
 		# return the best fit model on a grid for plotting purposes
-		bestmodel = (modscales, hmobj.get_ang_cf(modscales), unbiasedmod)
+		bestmodel = hmobj.get_ang_cf(modscales)
 	else:
-		bestmodel = (modscales, hmobj.get_spatial_cf(radii=modscales), unbiasedmod)
+		bestmodel = hmobj.get_spatial_cf(radii=modscales)
 
-	return popt[0], np.sqrt(pcov)[0][0], bestmodel
+	outdict['modscales'] = modscales
+	outdict['dmcf'] = unbiasedmod
+	outdict['autofitcf'] = bestmodel
+
+	return outdict
 
 
 # fit either a projected or angular correlation function for an effective bias or halo mass
@@ -141,7 +150,7 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 	xcorr, xerr = xcorr[goodidx], xerr[goodidx]
 
 	if angular:
-		modscales = np.logspace(-3, 0., 200)
+		modscales = np.logspace(-2.5, -0.5, 200)
 		unbiasedmod = hmobj.get_ang_cf(modscales)
 	else:
 		modscales = np.logspace(-1, 2.3, 200)
@@ -150,6 +159,7 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 	autofit = fit_cf(dndz=dndz_auto, cf=autocf, model=model)
 	par_auto, err_auto = autofit[0], autofit[1]
 
+	outdict = {}
 	# if fitting for an effective halo mass
 	if model == 'mass':
 		partialfun = partial(mass_biased_xcf, mass2=par_auto, scales=scalebins,
@@ -157,6 +167,8 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 		popt, pcov = curve_fit(partialfun, None, xcorr, sigma=xerr, absolute_sigma=True,
 							   bounds=[11, 14], p0=12.5)
 		hmobj.set_powspec(log_meff=popt[0])
+		outdict['Mx'] = popt[0]
+		outdict['sigMx'] = np.sqrt(pcov)[0][0]
 
 	# if fitting for an effective bias
 	elif model == 'bias':
@@ -165,12 +177,16 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 		popt, pcov = curve_fit(partialfun, None, xcorr, sigma=xerr, absolute_sigma=True,
 							   bounds=[0.5, 30], p0=2)
 		hmobj.set_powspec(bias1=popt[0])
+		outdict['bx'] = popt[0]
+		outdict['sigbx'] = np.sqrt(pcov)[0][0]
 	elif model == 'minmass':
 		partialfun = partial(minmass_biased_xcf, minmass2=par_auto, scales=scalebins,
 							 hmobject=hmobj, angular=angular, idx=goodidx)
 		popt, pcov = curve_fit(partialfun, None, xcorr, sigma=xerr, absolute_sigma=True,
 							   bounds=[11, 14], p0=12.)
 		hmobj.set_powspec(log_m_min1=popt[0])
+		outdict['Mxmin'] = popt[0]
+		outdict['sigMxmin'] = np.sqrt(pcov)[0][0]
 
 	# or do full hod modeling with mcmc, not implemented
 	else:
@@ -178,140 +194,51 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 
 	if angular:
 		# return the best fit model on a grid for plotting purposes
-		bestmodel = (modscales, hmobj.get_ang_cf(modscales), unbiasedmod)
+		bestmodel = hmobj.get_ang_cf(modscales)
 	else:
-		bestmodel = (modscales, hmobj.get_spatial_cf(radii=modscales), unbiasedmod)
-
+		bestmodel = hmobj.get_spatial_cf(radii=modscales)
+	outdict['modscales'] = modscales
+	outdict['dmcf'] = unbiasedmod
+	outdict['xfitcf'] = bestmodel
 	# Figure out how to incorporate errors on reference population
-	return popt[0], np.sqrt(pcov)[0][0], bestmodel
+	return outdict
 
 
 # fit for bias, effective mass, minimum mass, and return diagnostic plot
 def fit_pipeline(dndz, cf, dndL=None):
-	import matplotlib.pyplot as plt
-
-	if 'rp' in cf:
-		angular = False
-		scalebins, effscales, corr, err = cf['rp_bins'], cf['rp'], cf['wp'], cf['wp_err']
-	else:
-		angular = True
-		scalebins, effscales, corr, err = cf['theta_bins'], cf['theta'], cf['w_theta'], cf['w_err']
-
-	fig, ax = plt.subplots(figsize=(8, 7))
-	ax.scatter(effscales, corr, c='k')
-	ax.errorbar(effscales, corr, yerr=err, ecolor='k', fmt='none')
+	from . import plotscripts
 
 	outdict = {}
-	b, berr, b_model = fit_cf(dndz=dndz, cf=cf, model='bias')
-	m, merr, m_model = fit_cf(dndz=dndz, cf=cf, model='mass')
-	mmin, mmin_err, mmin_model = fit_cf(dndz=dndz, cf=cf, model='minmass')
+	outdict.update(fit_cf(dndz=dndz, cf=cf, model='bias'))
+	outdict.update(fit_cf(dndz=dndz, cf=cf, model='mass'))
+	outdict.update(fit_cf(dndz=dndz, cf=cf, model='minmass'))
 
-	outdict['b'], outdict['sigb'] = b, berr
-	outdict['M'], outdict['sigM'] = m, merr
-	outdict['Mmin'], outdict['sigMmin'] = mmin, mmin_err
 	if dndL is not None:
 		from . import luminosityfunction
-		fduty = luminosityfunction.occupation_fraction(dndL, dndz, logminmasses=mmin)[0]
-		ax.text(0.1, 0.05, r'$f_{\mathrm{duty}} = %s$' % (round(fduty, 4)),
-				transform=plt.gca().transAxes, fontsize=15)
-	
-	ax.text(0.1, 0.2, '$b = %s \pm %s$' % (round(b, 2), round(berr, 2)),
-			transform=plt.gca().transAxes, fontsize=15)
-	ax.text(0.1, 0.15, '$log_{10}(M_{\mathrm{eff}}) = %s \pm %s$' % (round(m, 2), round(merr, 2)),
-			transform=plt.gca().transAxes, fontsize=15)
-	ax.text(0.1, 0.1, '$log_{10}(M_{\mathrm{min}}) = %s \pm %s$' % (round(mmin, 2), round(mmin_err, 2)),
-			transform=plt.gca().transAxes, fontsize=15)
-	
-	plt.plot(b_model[0], b_model[1], c='k', ls='dotted')
-	plt.plot(b_model[0], b_model[2], c='k', ls='dashed')
-	plt.xscale('log')
-	plt.yscale('log')
-	if angular:
-		plt.xlabel(r'$\theta$ [deg]', fontsize=20)
-		plt.ylabel(r'$w(\theta)$', fontsize=20)
-	else:
-		plt.xlabel(r'$r_p \ [\mathrm{Mpc}/h]$', fontsize=20)
-		plt.ylabel(r'$w_{p}(r_{p})$', fontsize=20)
-	plt.close()
-	outdict['plot'] = fig
+		fduty = luminosityfunction.occupation_fraction(dndL, dndz, logminmasses=outdict['Mmin'])[0]
+		outdict['fduty'] = fduty
+		#ax.text(0.1, 0.05, r'$f_{\mathrm{duty}} = %s$' % (round(fduty, 4)),
+		#		transform=plt.gca().transAxes, fontsize=15)
+
+	outdict['plot'] = plotscripts.autoclustering_fit(cf, outdict)
 	
 	return outdict
 
 
 # fit for bias, effective mass, minimum mass, and return diagnostic plot
 def xfit_pipeline(dndz_x, cf_x, dndz_auto, autocf):
-	import matplotlib.pyplot as plt
-	from plottools import aesthetic
-
-	if 'rp' in cf_x:
-		angular = False
-		effscales, xcorr, xerr = cf_x['rp'], cf_x['wp'], cf_x['wp_err']
-		autocorr, autoerr = autocf['wp'], autocf['wp_err']
-
-	else:
-		angular = True
-		effscales, xcorr, xerr = cf_x['theta'], cf_x['w_theta'], cf_x['w_err']
-		autocorr, autoerr = autocf['w_theta'], autocf['w_err']
-
-	fig, (ax, ax2) = plt.subplots(figsize=(16, 7), ncols=2, sharey=True)
-	ax.scatter(effscales, autocorr, c='k')
-	ax.errorbar(effscales, autocorr, yerr=autoerr, ecolor='k', fmt='none')
-	ax2.scatter(effscales, xcorr, c='k')
-	ax2.errorbar(effscales, xcorr, yerr=xerr, ecolor='k', fmt='none')
+	from . import plotscripts
 
 	outdict = {}
-	b, berr, b_model = fit_cf(dndz=dndz_auto, cf=autocf, model='bias')
-	m, merr, m_model = fit_cf(dndz=dndz_auto, cf=autocf, model='mass')
-	mmin, mmin_err, mmin_model = fit_cf(dndz=dndz_auto, cf=autocf, model='minmass')
+	# auto fits
+	outdict.update(fit_cf(dndz=dndz_auto, cf=autocf, model='bias'))
+	outdict.update(fit_cf(dndz=dndz_auto, cf=autocf, model='mass'))
+	outdict.update(fit_cf(dndz=dndz_auto, cf=autocf, model='minmass'))
+	# cross fits
+	outdict.update(fit_xcf(dndz_x=dndz_x, cf_x=cf_x, dndz_auto=dndz_auto, autocf=autocf, model='bias'))
+	outdict.update(fit_xcf(dndz_x=dndz_x, cf_x=cf_x, dndz_auto=dndz_auto, autocf=autocf, model='mass'))
+	outdict.update(fit_xcf(dndz_x=dndz_x, cf_x=cf_x, dndz_auto=dndz_auto, autocf=autocf, model='minmass'))
 
-	outdict['b'], outdict['sigb'] = b, berr
-	outdict['M'], outdict['sigM'] = m, merr
-	outdict['Mmin'], outdict['sigMmin'] = mmin, mmin_err
-
-	ax.text(0.1, 0.2, '$b = %s \pm %s$' % (round(b, 2), round(berr, 2)),
-			transform=ax.transAxes, fontsize=15)
-	ax.text(0.1, 0.15, '$log_{10}(M_{\mathrm{eff}}) = %s \pm %s$' % (round(m, 2), round(merr, 2)),
-			transform=ax.transAxes, fontsize=15)
-	ax.text(0.1, 0.1, '$log_{10}(M_{\mathrm{min}}) = %s \pm %s$' % (round(mmin, 2), round(mmin_err, 2)),
-			transform=ax.transAxes, fontsize=15)
-
-	ax.plot(b_model[0], b_model[1], c='k', ls='dotted')
-	ax.plot(b_model[0], b_model[2], c='k', ls='dashed')
-	ax.set_xscale('log')
-	ax.set_yscale('log')
-
-	bx, bxerr, bx_model = fit_xcf(dndz_x=dndz_x, cf_x=cf_x, dndz_auto=dndz_auto, autocf=autocf, model='bias')
-	mx, mxerr, mx_model = fit_xcf(dndz_x=dndz_x, cf_x=cf_x, dndz_auto=dndz_auto, autocf=autocf, model='mass')
-	mxmin, mxmin_err, mxmin_model = fit_xcf(dndz_x=dndz_x, cf_x=cf_x, dndz_auto=dndz_auto,
-											autocf=autocf, model='minmass')
-
-	outdict['bx'], outdict['sigbx'] = bx, bxerr
-	outdict['Mx'], outdict['sigMx'] = mx, mxerr
-	outdict['Mxmin'], outdict['sigMxmin'] = mxmin, mxmin_err
-
-	ax2.plot(bx_model[0], bx_model[1], c='k', ls='dotted')
-	ax2.plot(bx_model[0], bx_model[2], c='k', ls='dashed')
-	ax2.set_xscale('log')
-	ax2.set_yscale('log')
-
-	ax2.text(0.1, 0.2, '$b = %s \pm %s$' % (round(bx, 2), round(bxerr, 2)),
-			transform=ax2.transAxes, fontsize=15)
-	ax2.text(0.1, 0.15, '$log_{10}(M_{\mathrm{eff}}) = %s \pm %s$' % (round(mx, 2), round(mxerr, 2)),
-			transform=ax2.transAxes, fontsize=15)
-	ax2.text(0.1, 0.1, '$log_{10}(M_{\mathrm{min}}) = %s \pm %s$' % (round(mxmin, 2), round(mxmin_err, 2)),
-			transform=ax2.transAxes, fontsize=15)
-
-
-	if angular:
-		ax.set_xlabel(r'$\theta$ [deg]', fontsize=20)
-		ax2.set_xlabel(r'$\theta$ [deg]', fontsize=20)
-		ax.set_ylabel(r'$w(\theta)$', fontsize=20)
-	else:
-		ax.set_xlabel(r'$r_p \ [\mathrm{Mpc}/h]$', fontsize=20)
-		ax2.set_xlabel(r'$r_p \ [\mathrm{Mpc}/h]$', fontsize=20)
-		ax.set_ylabel(r'$w_{p}(r_{p})$', fontsize=20)
-	plt.subplots_adjust(wspace=0)
-	plt.close()
-	outdict['plot'] = fig
+	outdict['plot'] = plotscripts.crossclustering_fit(cf_x=cf_x, autocf=autocf, outdict=outdict)
 
 	return outdict
