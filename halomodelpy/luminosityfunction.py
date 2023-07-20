@@ -3,6 +3,7 @@ import os
 import astropy.units as u
 from . import cosmo
 from . import hubbleunits
+from . import redshift_helper
 
 
 
@@ -75,6 +76,7 @@ def int_hmf_z(dndz, logminmass, massgrid=np.logspace(11, 16, 5000)):
     Space density of halos more massive than minmass, over givne redshift distribution
     Non log, (little h / Mpc)^3 units
     """
+    dndz = redshift_helper.norm_z_dist(dndz)
     zs, dndz = dndz
     ints_at_zs = []
     # for each redshift in grid

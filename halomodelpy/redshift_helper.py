@@ -50,3 +50,21 @@ def effective_z(dndz, dndz2=None):
 			print('Redshift distribution grids do not match')
 		dndz = (dndz[0], dndz[1]*dndz2[1])
 	return np.average(dndz[0], weights=dndz[1])
+
+def effective_lensing_z(dndz):
+	from . import hm_calcs
+	hmob = hm_calcs.halomodel(dndz)
+	lenskern = hmob.lens_kernel
+	chis = hmob.chi_z
+	lensterm = lenskern / (chis ** 2)
+	hz = hmob.Hz
+	dchidz = hmob.dchidz
+	integrand = hz * dndz[1] * lensterm * dchidz
+
+	denmo = np.trapz(integrand, x=dndz[0])
+	return np.trapz(integrand * dndz[0], x=dndz[0]) / denmo
+
+	#lensterm /= np.trapz(lensterm, x=dndz[0])
+	#lens_dist = dndz[1] * lensterm
+	#return np.average(dndz[0], weights=lens_dist)
+	#return np.trapz(lens_dist*dndz[0], x=dndz[0])

@@ -82,7 +82,7 @@ def fit_cf(dndz, cf, model='mass'):
 		angular = True
 		scalebins, corr, err = cf['theta_bins'], cf['w_theta'], cf['w_err']
 	if angular:
-		modscales = np.logspace(-2.5, -.5, 200)
+		modscales = np.logspace(-2.5, 0, 200)
 		unbiasedmod = hmobj.get_ang_cf(modscales)
 	else:
 		modscales = np.logspace(-1, 2.3, 200)
@@ -150,41 +150,44 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 	xcorr, xerr = xcorr[goodidx], xerr[goodidx]
 
 	if angular:
-		modscales = np.logspace(-2.5, -0.5, 200)
+		modscales = np.logspace(-2.5, 0, 200)
 		unbiasedmod = hmobj.get_ang_cf(modscales)
 	else:
 		modscales = np.logspace(-1, 2.3, 200)
 		unbiasedmod = hmobj.get_spatial_cf(radii=modscales)
 
 	autofit = fit_cf(dndz=dndz_auto, cf=autocf, model=model)
-	par_auto, err_auto = autofit[0], autofit[1]
+
 
 	outdict = {}
 	# if fitting for an effective halo mass
 	if model == 'mass':
+		par_auto, err_auto = autofit['M'], autofit['sigM']
 		partialfun = partial(mass_biased_xcf, mass2=par_auto, scales=scalebins,
 							 hmobject=hmobj, angular=angular, idx=goodidx)
 		popt, pcov = curve_fit(partialfun, None, xcorr, sigma=xerr, absolute_sigma=True,
 							   bounds=[11, 14], p0=12.5)
-		hmobj.set_powspec(log_meff=popt[0])
+		hmobj.set_powspec(log_meff=par_auto, log_meff_2=popt[0])
 		outdict['Mx'] = popt[0]
 		outdict['sigMx'] = np.sqrt(pcov)[0][0]
 
 	# if fitting for an effective bias
 	elif model == 'bias':
+		par_auto, err_auto = autofit['b'], autofit['sigb']
 		partialfun = partial(biased_xcf, bias2=par_auto, scales=scalebins,
 							 hmobject=hmobj, angular=angular, idx=goodidx)
 		popt, pcov = curve_fit(partialfun, None, xcorr, sigma=xerr, absolute_sigma=True,
 							   bounds=[0.5, 30], p0=2)
-		hmobj.set_powspec(bias1=popt[0])
+		hmobj.set_powspec(bias1=par_auto, bias2=popt[0])
 		outdict['bx'] = popt[0]
 		outdict['sigbx'] = np.sqrt(pcov)[0][0]
 	elif model == 'minmass':
+		par_auto, err_auto = autofit['Mmin'], autofit['sigMmin']
 		partialfun = partial(minmass_biased_xcf, minmass2=par_auto, scales=scalebins,
 							 hmobject=hmobj, angular=angular, idx=goodidx)
 		popt, pcov = curve_fit(partialfun, None, xcorr, sigma=xerr, absolute_sigma=True,
 							   bounds=[11, 14], p0=12.)
-		hmobj.set_powspec(log_m_min1=popt[0])
+		hmobj.set_powspec(log_m_min1=par_auto, log_m_min2=popt[0])
 		outdict['Mxmin'] = popt[0]
 		outdict['sigMxmin'] = np.sqrt(pcov)[0][0]
 
