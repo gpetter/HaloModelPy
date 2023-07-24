@@ -277,3 +277,20 @@ class halomod_workspace(object):
 		#return f_sat, beff, meff
 		return f_sat, beff
 
+def zheng_hod(params, param_ids, massgrid=np.logspace(11, 15, 100)):
+	from . import mcmc
+	logm, logsigm, logm0, logm1, alpha = mcmc.parse_params(params, param_ids)
+	mmin = 10 ** logm
+	m1 = 10 ** logm1
+	# fix softening parameter
+	sigma = logsigm
+	n_cen = 1 / 2. * (1 + special.erf(np.log10(massgrid / mmin) / sigma))
+	n_sat = np.heaviside(massgrid - mmin, 1) * (((massgrid - mmin) / m1) ** alpha)
+	n_sat[np.where(np.logical_not(np.isfinite(n_sat)))] = 0.
+	outdict = {}
+	outdict['mgrid'] = np.log10(massgrid)
+	outdict['ncen'] = n_cen
+	outdict['nsat'] = n_sat
+	outdict['hod'] = n_cen + n_sat
+
+	return outdict

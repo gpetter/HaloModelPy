@@ -1,6 +1,6 @@
 import numpy as np
 from . import hm_calcs
-from . import mcmc
+
 from . import interpolate_helper
 from functools import partial
 from scipy.optimize import curve_fit
@@ -114,11 +114,8 @@ def fit_cf(dndz, cf, model='mass'):
 		hmobj.set_powspec(log_m_min1=popt[0])
 		outdict['Mmin'], outdict['sigMmin'] = popt[0], np.sqrt(pcov)[0][0]
 
-
-
-	# or do full hod modeling with mcmc, not implemented
 	else:
-		centervals, lowerrs, higherrs = mcmc.sample_cf_space
+		print('Options are mass, bias, minmass')
 	if angular:
 		# return the best fit model on a grid for plotting purposes
 		bestmodel = hmobj.get_ang_cf(modscales)
@@ -193,7 +190,7 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 
 	# or do full hod modeling with mcmc, not implemented
 	else:
-		centervals, lowerrs, higherrs = mcmc.sample_cf_space
+		print('Options are mass, bias, minmass')
 
 	if angular:
 		# return the best fit model on a grid for plotting purposes
@@ -243,5 +240,17 @@ def xfit_pipeline(dndz_x, cf_x, dndz_auto, autocf):
 	outdict.update(fit_xcf(dndz_x=dndz_x, cf_x=cf_x, dndz_auto=dndz_auto, autocf=autocf, model='minmass'))
 
 	outdict['plot'] = plotscripts.crossclustering_fit(cf_x=cf_x, autocf=autocf, outdict=outdict)
+
+	return outdict
+
+def fitmcmc(nwalkers, niter, dndz, cf, freeparam_ids, initial_params):
+	from . import mcmc
+	from . import plotscripts
+	outdict = {}
+	chain = mcmc.sample_cf_space(nwalkers=nwalkers, niter=niter, dndz=dndz, cf=cf,
+								 freeparam_ids=freeparam_ids, initial_params=initial_params)
+	outdict['chain'] = chain
+	outdict['corner'] = plotscripts.hod_corner(chain=chain, param_ids=freeparam_ids)
+	outdict['hods'] = plotscripts.hod_realizations(chain=chain, param_ids=freeparam_ids)
 
 	return outdict

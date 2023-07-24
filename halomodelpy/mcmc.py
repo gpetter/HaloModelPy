@@ -3,14 +3,21 @@ import numpy as np
 from . import hm_calcs
 
 
-paramdict = {'M': 0, 'sigM': 1, 'M0': 2, 'M1':3 , 'alpha': 4}
+paramdict = {'M': 0, 'sigM': 1, 'M0': 2, 'M1':3, 'alpha': 4}
 
-default_hod = np.array([12.5, 1e-3, 12.5, 13.5, 1.])
+
 
 def parse_params(theta, freeparam_ids):
+	default_hod = np.array([12.5, 1e-3, 12.5, 13.5, 1.])
 	hodparams = np.copy(default_hod)
 	for j in range(len(freeparam_ids)):
 		hodparams[paramdict[freeparam_ids[j]]] = theta[j]
+	# if M0 not a free parameter, set equal to M_min
+	if 'M0' not in freeparam_ids:
+		hodparams[paramdict['M0']] = theta[0]
+	# if M1 not a free parameter, set to 10x M_min
+	if 'M1' not in freeparam_ids:
+		hodparams[paramdict['M1']] = 1. + theta[0]
 	return hodparams
 
 
@@ -19,7 +26,7 @@ def parse_params(theta, freeparam_ids):
 # log prior function
 def ln_prior(hodparams):
 	mmin = hodparams[0]
-	if (mmin < 11) | (mmin < 14):
+	if (mmin < 11) | (mmin > 14):
 		return -np.inf
 	m1 = hodparams[paramdict['M1']]
 	if (m1 < 12) | (m1 > 15):
@@ -47,35 +54,36 @@ def ln_likelihood(residual, yerr):
 
 
 # log probability is prior plus likelihood
-def ln_prob_cf(theta, cf, dndz, freeparam_ids, hmobj):
+def ln_prob_cf(theta, cf, freeparam_ids, hmobj):
 	anglebins = cf['theta_bins']
 	y = cf['w_theta']
 	yerr = cf['w_err']
 	hodparams = parse_params(theta, freeparam_ids)
 	prior = ln_prior(hodparams)
+	if prior > -np.inf:
+		hmobj.set_powspec(hodparams=hodparams)
+		# keep track of derived parameters like satellite fraction, effective bias, effective mass
+		#derived = (hod_model.derived_parameters(zs, dndz, theta, modeltype))
+		#derived = hmobj.hm.derived_parameters(dndz=dndz)
 
-	hmobj.set_powspec(hodparams=hodparams)
-	# keep track of derived parameters like satellite fraction, effective bias, effective mass
-	#derived = (hod_model.derived_parameters(zs, dndz, theta, modeltype))
-	#derived = hmobj.hm.derived_parameters(dndz=dndz)
 
+		# get model prediciton for given parameter set
+		#modelprediction = clusteringModel.angular_corr_func_in_bins(anglebins, zs=zs, dn_dz_1=dndz,
+		#                                                            hodparams=theta,
+		#                                                            hodmodel=modeltype)
+		modelprediction = hmobj.get_binned_ang_cf(theta_bins=anglebins)
 
+		# residual is data - model
+		residual = y - modelprediction
 
-	# get model prediciton for given parameter set
-	#modelprediction = clusteringModel.angular_corr_func_in_bins(anglebins, zs=zs, dn_dz_1=dndz,
-	#                                                            hodparams=theta,
-	#                                                            hodmodel=modeltype)
-	modelprediction = hmobj.get_binned_ang_cf(theta_bins=anglebins)
+		likely = ln_likelihood(residual, yerr)
+		prob = prior + likely
 
-	# residual is data - model
-	residual = y - modelprediction
-
-	likely = ln_likelihood(residual, yerr)
-	prob = prior + likely
-
-	# return log_prob, along with derived parameters for this parameter set
-	#return (prob,) + derived
-	return prob
+		# return log_prob, along with derived parameters for this parameter set
+		#return (prob,) + derived
+		return prob
+	else:
+		return prior
 
 
 # log probability is prior plus likelihood
@@ -114,7 +122,7 @@ def sample_cf_space(nwalkers, niter, cf, dndz, freeparam_ids, initial_params=Non
 
 
 	sampler = emcee.EnsembleSampler(nwalkers, ndim, ln_prob_cf,
-									args=[cf, dndz, freeparam_ids, halomod_obj],
+									args=[cf, freeparam_ids, halomod_obj],
 	                                pool=pool)
 
 
@@ -124,7 +132,7 @@ def sample_cf_space(nwalkers, niter, cf, dndz, freeparam_ids, initial_params=Non
 	sampler.run_mcmc(pos, niter, progress=True)
 
 
-	flatchain = sampler.get_chain(discard=10, flat=True)
+	flatchain = np.array(sampler.get_chain(flat=True))
 	#blobs = sampler.get_blobs(discard=10, flat=True)
 
 
@@ -142,16 +150,16 @@ def sample_cf_space(nwalkers, niter, cf, dndz, freeparam_ids, initial_params=Non
 			np.atleast_2d(blobs['m_eff']).T
 		))"""
 
-	#np.array(flatchain).dump('results/chains/%s.npy' % binnum)
+
 
 	centervals, lowerrs, higherrs = [], [], []
 	#for i in range(ndim + len(blobs_dtype)):
-	for i in range(ndim):
+	"""for i in range(ndim):
 		post = np.percentile(flatchain[:, i], [16, 50, 84])
 		q = np.diff(post)
 		centervals.append(post[1])
 		lowerrs.append(q[0])
-		higherrs.append(q[1])
+		higherrs.append(q[1])"""
 
 
 	#plotting.hod_corner('clustering', flatchain, ndim, binnum, nbins)
@@ -160,7 +168,7 @@ def sample_cf_space(nwalkers, niter, cf, dndz, freeparam_ids, initial_params=Non
 	#	flatchains = [np.load('results/chains/%s.npy' % (j+1), allow_pickle=True) for j in range(nbins)]
 	#	plotting.overlapping_corners('clustering', flatchains, ndim, nbins)
 
-	return centervals, lowerrs, higherrs
+	return flatchain
 
 
 def sample_lens_space(binnum, nbins, nwalkers, ndim, niter, ell_bins, y, yerr,
