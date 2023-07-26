@@ -251,6 +251,6 @@ def fitmcmc(nwalkers, niter, dndz, cf, freeparam_ids, initial_params):
 								 freeparam_ids=freeparam_ids, initial_params=initial_params)
 	outdict['chain'] = chain
 	outdict['corner'] = plotscripts.hod_corner(chain=chain, param_ids=freeparam_ids)
-	outdict['hods'] = plotscripts.hod_realizations(chain=chain, param_ids=freeparam_ids)
+	#outdict['hods'] = plotscripts.hod_realizations(chain=chain, param_ids=freeparam_ids)
 
 	return outdict

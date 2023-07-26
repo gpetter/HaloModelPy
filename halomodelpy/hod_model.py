@@ -65,7 +65,7 @@ def three_param_hod(masses, logm_min, alpha, logm1):
 	mmin = 10 ** logm_min
 	m1 = 10 ** logm1
 	# fix softening parameter
-	sigma = paramobj.sigma_logM
+	sigma = 0.001
 	n_cen = 1 / 2. * (1 + special.erf(np.log10(masses/mmin) / sigma))
 	n_sat = np.heaviside(masses - mmin, 1) * (((masses - mmin) / m1) ** alpha)
 	n_sat[np.where(np.logical_not(np.isfinite(n_sat)))] = 0.

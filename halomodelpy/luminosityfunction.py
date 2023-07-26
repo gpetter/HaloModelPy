@@ -9,6 +9,43 @@ from . import redshift_helper
 
 shen2020dir = '/home/graysonpetter/ssd/Dartmouth/common_tools/quasarlf/'
 
+def int_qsolf(logLbolmin, z):
+    """
+    Integrate the QSO luminosity function above a bolometric luminosity at redshift z
+    :param logLbolmin: e.g. 45
+    :param z:
+    :return: density in hubble units
+    """
+    originaldir = os.getcwd()
+    # use code from Shen et al 2020
+    os.chdir(shen2020dir + 'pubtools/')
+    import utilities
+    lgrid, lf = utilities.return_bolometric_qlf(redshift=z)
+    moreluminous = np.where(lgrid > logLbolmin)
+
+    density = hubbleunits.add_h_to_density(np.trapz(10**lf[moreluminous], x=lgrid[moreluminous]))
+    os.chdir(originaldir)
+    return density
+
+def qso_luminosity_density(logLbolmin, z):
+    """
+    Integrate QSO luminosity function times luminosity. L * phi
+    :param logLbolmin: e.g. 45
+    :param z:
+    :return: luminosity (erg/s) density in hubble units
+    """
+    originaldir = os.getcwd()
+    # use code from Shen et al 2020
+    os.chdir(shen2020dir + 'pubtools/')
+    import utilities
+    lgrid, lf = utilities.return_bolometric_qlf(redshift=z)
+    moreluminous = np.where(lgrid > logLbolmin)
+
+    lphi = (10 ** lf[moreluminous]) * (10 ** lgrid[moreluminous])
+    density = hubbleunits.add_h_to_density(np.trapz(lphi, x=lgrid[moreluminous]))
+    os.chdir(originaldir)
+    return density
+
 
 def int_lf_over_z_and_l(dndL, dndz, nu=None):
     """
@@ -86,6 +123,15 @@ def int_hmf_z(dndz, logminmass, massgrid=np.logspace(11, 16, 5000)):
 
     return np.trapz(np.array(ints_at_zs)*dndz, x=zs)
 
+def hmf_zrange(zrange, logminmass):
+    """
+    Integrate HMF above log min mass, over a redshift range, assuming constant dN/dz
+    :param zrange:
+    :param logminmass:
+    :return:
+    """
+    dndz = redshift_helper.dndz_from_z_list(np.random.uniform(zrange[0], zrange[1], 10000), 10)
+    return int_hmf_z(dndz=dndz, logminmass=logminmass)
 
 def occupation_fraction(dndL, dndz, logminmasses, nu=None, logmin_errs=None):
     """

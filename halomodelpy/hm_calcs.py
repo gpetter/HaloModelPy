@@ -401,7 +401,7 @@ class halomodel(object):
 		return pk_z_to_xi_r(pk_z=self.pk_z, dndz=self.dndz, radii=radii, k_grid=self.k_grid, projected=projected)
 
 	def get_binned_spatial_cf(self, radius_bins, projected=True):
-		sepgrid = np.logspace(np.log10(np.min(radius_bins)), np.log10(np.max(radius_bins)), 100)
+		sepgrid = np.logspace(np.log10(np.min(radius_bins)/2.), np.log10(np.max(radius_bins)*2.), 100)
 		wp = self.get_spatial_cf(radii=sepgrid, projected=projected)
 		return stats.binned_statistic(sepgrid, wp, statistic='mean', bins=radius_bins)[0]
 
@@ -409,12 +409,16 @@ class halomodel(object):
 		return c_ell_kappa_g(pk_z=self.pk_z, dndz=self.dndz, ells=ells, k_grid=self.k_grid,
 							 chi_z=self.chi_z, H_z=self.Hz, lin_pk_z=self.lin_pk_z, lenskern=self.lens_kernel)
 
-	def get_binned_c_ell_kg(self, ells, ell_bins=None, master_workspace=None):
-		xpower = self.get_c_ell_kg(ells=ells)
+	def get_binned_c_ell_kg(self, ell_bins=None, master_workspace=None):
+		if ell_bins is not None:
+			ell_grid = np.logspace(np.log10(np.min(ell_bins)/2.), np.log10(np.max(ell_bins)*2.), 100)
+		else:
+			ell_grid = np.logspace(1, 3.5, 100)
+		xpower = self.get_c_ell_kg(ells=ell_grid)
 		if master_workspace is not None:
 			binned_xpow = master_workspace.decouple_cell(master_workspace.couple_cell([xpower]))[0]
 		else:
-			binned_xpow = 10 ** (stats.binned_statistic(ells, np.log10(xpower), statistic='median', bins=ell_bins)[0])
+			binned_xpow = 10 ** (stats.binned_statistic(ell_grid, np.log10(xpower), statistic='median', bins=ell_bins)[0])
 		return binned_xpow
 
 	def get_binned_kappa_prof(self, theta_bins, l_beam=None, theta_grid=np.radians(np.linspace(0.001, 3, 1000))):

@@ -29,10 +29,10 @@ def ln_prior(hodparams):
 	if (mmin < 11) | (mmin > 14):
 		return -np.inf
 	m1 = hodparams[paramdict['M1']]
-	if (m1 < 12) | (m1 > 15):
+	if (m1 < 12) | (m1 > 15) | (m1 < mmin):
 		return -np.inf
 	alpha = hodparams[paramdict['alpha']]
-	if (alpha < 0.1) | (alpha > 3):
+	if (alpha < 0.4) | (alpha > 2.5):
 		return -np.inf
 	return 0.
 
@@ -87,27 +87,33 @@ def ln_prob_cf(theta, cf, freeparam_ids, hmobj):
 
 
 # log probability is prior plus likelihood
-def ln_prob_lens(theta, ell_bins, y, yerr, zs, dndz, modeltype, hmobj):
-	prior = ln_prior(theta)
+def ln_prob_lens(theta, xcorr, freeparam_ids, hmobj):
+	ell_bins = xcorr['ell_bins']
+	y = xcorr['cl']
+	yerr = xcorr['cl_err']
+	hodparams = parse_params(theta, freeparam_ids)
+	prior = ln_prior(hodparams)
+	if prior > -np.inf:
+		hmobj.set_powspec(hodparams=hodparams)
+		# keep track of derived parameters like satellite fraction, effective bias, effective mass
+		#derived = (hod_model.derived_parameters(zs, dndz, theta, modeltype))
+		#derived = hmobj.hm.derived_parameters(dndz=dndz)
 
-	hmobj.set_powspec(hodparams=theta, modeltype=modeltype)
-	# keep track of derived parameters like satellite fraction, effective bias, effective mass
-	#derived = (hod_model.derived_parameters(zs, dndz, theta, modeltype))
-	derived = hmobj.hm.derived_parameters(dndz=dndz)
 
+		# get model prediciton for given parameter set
+		modelprediction = hmobj.get_binned_c_ell_kg(ell_bins)
 
+		# residual is data - model
+		residual = y - modelprediction
 
-	# get model prediciton for given parameter set
-	modelprediction = hmobj.get_binned_c_ell_kg(dndz=(zs, dndz), ls=(1+np.arange(3000)))
+		likely = ln_likelihood(residual, yerr)
+		prob = prior + likely
 
-	# residual is data - model
-	residual = y - modelprediction
-
-	likely = ln_likelihood(residual, yerr)
-	prob = prior + likely
-
-	# return log_prob, along with derived parameters for this parameter set
-	return (prob,) + derived
+		# return log_prob, along with derived parameters for this parameter set
+		#return (prob,) + derived
+		return prob
+	else:
+		return prior
 
 
 
@@ -171,24 +177,17 @@ def sample_cf_space(nwalkers, niter, cf, dndz, freeparam_ids, initial_params=Non
 	return flatchain
 
 
-def sample_lens_space(binnum, nbins, nwalkers, ndim, niter, ell_bins, y, yerr,
-                 zs, dndz, modeltype, initial_params=None, pool=None):
+def sample_lens_space(nwalkers, niter, xcorr, dndz, freeparam_ids, initial_params=None, pool=None):
+	ndim = len(freeparam_ids)
+	#blobs_dtype = [("f_sat", float), ("b_eff", float), ("m_eff", float)]
+	#if ndim == 1:
+	#	blobs_dtype = blobs_dtype[1:]
 
-	blobs_dtype = [("f_sat", float), ("b_eff", float), ("m_eff", float)]
-	if ndim == 1:
-		blobs_dtype = blobs_dtype[1:]
-
-	halomod_obj = hm_calcs.halomodel(zs=zs)
-
-
-	sampler = emcee.EnsembleSampler(nwalkers, ndim, ln_prob_lens, args=[ell_bins, y, yerr, zs, dndz,
-	                                                               modeltype, halomod_obj], blobs_dtype=blobs_dtype,
-	                                pool=pool)
+	halomod_obj = hm_calcs.halomodel(dndz)
 
 
-	if initial_params is None:
-		initial_params = [12.5, 0.5, 13.5]
-		initial_params = initial_params[:ndim]
+	sampler = emcee.EnsembleSampler(nwalkers, ndim, ln_prob_lens, args=[xcorr, freeparam_ids, halomod_obj], pool=pool)
+
 
 	# start walkers near least squares fit position with random gaussian offsets
 	pos = np.array(initial_params) + 2e-1 * np.random.normal(size=(sampler.nwalkers, sampler.ndim))
@@ -196,11 +195,11 @@ def sample_lens_space(binnum, nbins, nwalkers, ndim, niter, ell_bins, y, yerr,
 	sampler.run_mcmc(pos, niter, progress=True)
 
 
-	flatchain = sampler.get_chain(discard=10, flat=True)
-	blobs = sampler.get_blobs(discard=10, flat=True)
+	flatchain = sampler.get_chain(flat=True)
+	#blobs = sampler.get_blobs(discard=10, flat=True)
 
 
-	if ndim > 1:
+	"""if ndim > 1:
 		flatchain = np.hstack((
 			flatchain,
 			np.atleast_2d(blobs['f_sat']).T,
@@ -212,17 +211,17 @@ def sample_lens_space(binnum, nbins, nwalkers, ndim, niter, ell_bins, y, yerr,
 			flatchain,
 			np.atleast_2d(blobs['b_eff']).T,
 			np.atleast_2d(blobs['m_eff']).T
-		))
+		))"""
 
 	#np.array(flatchain).dump('results/chains/%s.npy' % binnum)
 
-	centervals, lowerrs, higherrs = [], [], []
+	"""centervals, lowerrs, higherrs = [], [], []
 	for i in range(ndim + len(blobs_dtype)):
 		post = np.percentile(flatchain[:, i], [16, 50, 84])
 		q = np.diff(post)
 		centervals.append(post[1])
 		lowerrs.append(q[0])
-		higherrs.append(q[1])
+		higherrs.append(q[1])"""
 
 
 	#plotting.hod_corner('lensing', flatchain, ndim, binnum, nbins)
@@ -231,4 +230,4 @@ def sample_lens_space(binnum, nbins, nwalkers, ndim, niter, ell_bins, y, yerr,
 		#flatchains = [np.load('results/chains/%s.npy' % (j+1), allow_pickle=True) for j in range(nbins)]
 		#plotting.overlapping_corners('lensing', flatchains, ndim, nbins)
 
-	return centervals, lowerrs, higherrs
+	return flatchain
