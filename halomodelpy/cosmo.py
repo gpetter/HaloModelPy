@@ -34,7 +34,7 @@ def rp2ell(rps, z, h_unit=True):
 	Convert projected separations at redshift z to corresponding angular \ell modes
 	"""
 	theta = rp2angle(rps, z, h_unit)
-	return 180. / theta
+	return np.sort(180. / theta)
 
 def hmf_z(logM_hubble, z):
 	return paramobj.hmf(10**logM_hubble, z)
