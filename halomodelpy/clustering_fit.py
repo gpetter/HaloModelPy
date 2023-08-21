@@ -95,7 +95,7 @@ def fit_cf(dndz, cf, model='mass'):
 	if model == 'mass':
 		partialfun = partial(mass_biased_cf, scales=scalebins, hmobject=hmobj, angular=angular, idx=goodidx)
 		popt, pcov = curve_fit(partialfun, None, corr, sigma=err, absolute_sigma=True,
-							bounds=[11, 14], p0=12.5)
+							bounds=[11, 14.5], p0=12.5)
 		hmobj.set_powspec(log_meff=popt[0])
 		outdict['M'], outdict['sigM'] = popt[0], np.sqrt(pcov)[0][0]
 
@@ -110,7 +110,7 @@ def fit_cf(dndz, cf, model='mass'):
 	elif model == 'minmass':
 		partialfun = partial(minmass_biased_cf, scales=scalebins, hmobject=hmobj, angular=angular, idx=goodidx)
 		popt, pcov = curve_fit(partialfun, None, corr, sigma=err, absolute_sigma=True,
-							   bounds=[11, 14], p0=12.)
+							   bounds=[11, 14.5], p0=12.)
 		hmobj.set_powspec(log_m_min1=popt[0])
 		outdict['Mmin'], outdict['sigMmin'] = popt[0], np.sqrt(pcov)[0][0]
 
@@ -163,7 +163,7 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 		partialfun = partial(mass_biased_xcf, mass2=par_auto, scales=scalebins,
 							 hmobject=hmobj, angular=angular, idx=goodidx)
 		popt, pcov = curve_fit(partialfun, None, xcorr, sigma=xerr, absolute_sigma=True,
-							   bounds=[11, 14], p0=12.5)
+							   bounds=[11, 14.5], p0=12.5)
 		hmobj.set_powspec(log_meff=par_auto, log_meff_2=popt[0])
 		outdict['Mx'] = popt[0]
 		outdict['sigMx'] = np.sqrt(pcov)[0][0]
@@ -183,7 +183,7 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 		partialfun = partial(minmass_biased_xcf, minmass2=par_auto, scales=scalebins,
 							 hmobject=hmobj, angular=angular, idx=goodidx)
 		popt, pcov = curve_fit(partialfun, None, xcorr, sigma=xerr, absolute_sigma=True,
-							   bounds=[11, 14], p0=12.)
+							   bounds=[11, 14.5], p0=12.)
 		hmobj.set_powspec(log_m_min1=par_auto, log_m_min2=popt[0])
 		outdict['Mxmin'] = popt[0]
 		outdict['sigMxmin'] = np.sqrt(pcov)[0][0]

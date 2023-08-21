@@ -4,10 +4,8 @@ import astropy.units as u
 from . import cosmo
 from . import hubbleunits
 from . import redshift_helper
+from . import shenqlf
 
-
-
-shen2020dir = '/home/graysonpetter/ssd/Dartmouth/common_tools/quasarlf/'
 
 def int_qsolf(logLbolmin, z):
     """
@@ -16,15 +14,13 @@ def int_qsolf(logLbolmin, z):
     :param z:
     :return: density in hubble units
     """
-    originaldir = os.getcwd()
-    # use code from Shen et al 2020
-    os.chdir(shen2020dir + 'pubtools/')
-    import utilities
-    lgrid, lf = utilities.return_bolometric_qlf(redshift=z)
+
+
+    lgrid, lf = shenqlf.return_bolometric_qlf(redshift=z)
     moreluminous = np.where(lgrid > logLbolmin)
 
     density = hubbleunits.add_h_to_density(np.trapz(10**lf[moreluminous], x=lgrid[moreluminous]))
-    os.chdir(originaldir)
+
     return density
 
 def qso_luminosity_density(logLbolmin, z):
@@ -34,16 +30,13 @@ def qso_luminosity_density(logLbolmin, z):
     :param z:
     :return: luminosity (erg/s) density in hubble units
     """
-    originaldir = os.getcwd()
-    # use code from Shen et al 2020
-    os.chdir(shen2020dir + 'pubtools/')
-    import utilities
-    lgrid, lf = utilities.return_bolometric_qlf(redshift=z)
+
+    lgrid, lf = shenqlf.return_bolometric_qlf(redshift=z)
     moreluminous = np.where(lgrid > logLbolmin)
 
     lphi = (10 ** lf[moreluminous]) * (10 ** lgrid[moreluminous])
     density = hubbleunits.add_h_to_density(np.trapz(lphi, x=lgrid[moreluminous]))
-    os.chdir(originaldir)
+
     return density
 
 
@@ -64,10 +57,7 @@ def int_lf_over_z_and_l(dndL, dndz, nu=None):
     Non log, (little h / Mpc)^3 units
 
     """
-    curdir = os.getcwd()
-    # use code from Shen et al 2020
-    os.chdir(shen2020dir + 'pubtools/')
-    import utilities
+
     zs, dndz = dndz
     ls, dndL = dndL
     ints_at_zs = []
@@ -75,10 +65,10 @@ def int_lf_over_z_and_l(dndL, dndz, nu=None):
     for z in zs:
         # if no frequency given, integrate bolometric LF
         if nu is None:
-            lgrid, lf = utilities.return_bolometric_qlf(redshift=z)
+            lgrid, lf = shenqlf.return_bolometric_qlf(redshift=z)
         else:
             # get luminosity function at redshift z and in band
-            lgrid, lf = utilities.return_qlf_in_band(redshift=z, nu=nu)
+            lgrid, lf = shenqlf.return_qlf_in_band(redshift=z, nu=nu)
         # interpolate QLF at positions of observed luminosity bins
         lf_at_ls = 10 ** np.interp(ls, lgrid, lf)
         # integrate over luminosity distribution
@@ -87,10 +77,17 @@ def int_lf_over_z_and_l(dndL, dndz, nu=None):
     dens = np.trapz(np.array(ints_at_zs)*dndz, x=zs) * (u.Mpc**-3)
     # convert to little h units for comparision with HMF
     dens_hunit = hubbleunits.add_h_to_density(dens.value)
-    os.chdir(curdir)
+
     return dens_hunit
 
 def int_hmf(z, logminmass, massgrid=np.logspace(11, 16, 5000)):
+    """
+    Number density of halos more massive than logminmass at redshift z
+    :param z:
+    :param logminmass:
+    :param massgrid:
+    :return:
+    """
     mfunc = cosmo.hmf_z(np.log10(massgrid), z)
     # number of halos more massive than M is integral of HMF from M to inf
     occupiedidxs = np.where(np.log10(massgrid) > logminmass)
