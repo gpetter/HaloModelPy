@@ -6,7 +6,6 @@ from . import hm_calcs
 paramdict = {'M': 0, 'sigM': 1, 'M0': 2, 'M1':3, 'alpha': 4}
 
 
-
 def parse_params(theta, freeparam_ids):
 	default_hod = np.array([12.5, 1e-3, 12.5, 13.5, 1.])
 	hodparams = np.copy(default_hod)
@@ -115,6 +114,16 @@ def ln_prob_lens(theta, xcorr, freeparam_ids, hmobj):
 	else:
 		return prior
 
+def clean_chain(chain, ids):
+	"""
+	Remove entries in chain which are outside prior bounds (a walker got "stuck")
+	"""
+	newchain = []
+	for j in range(len(chain)):
+		if np.isfinite(ln_prior(parse_params(chain[j], freeparam_ids=ids))):
+			newchain.append(chain[j])
+	return np.array(newchain)
+
 
 
 def sample_cf_space(nwalkers, niter, cf, dndz, freeparam_ids, initial_params=None, pool=None):
@@ -139,6 +148,7 @@ def sample_cf_space(nwalkers, niter, cf, dndz, freeparam_ids, initial_params=Non
 
 
 	flatchain = np.array(sampler.get_chain(flat=True))
+	flatchain = clean_chain(flatchain, freeparam_ids)
 	#blobs = sampler.get_blobs(discard=10, flat=True)
 
 
@@ -196,6 +206,7 @@ def sample_lens_space(nwalkers, niter, xcorr, dndz, freeparam_ids, initial_param
 
 
 	flatchain = sampler.get_chain(flat=True)
+	flatchain = clean_chain(flatchain, freeparam_ids)
 	#blobs = sampler.get_blobs(discard=10, flat=True)
 
 
