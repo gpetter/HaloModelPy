@@ -38,7 +38,7 @@ def biased_stack(foo, bias, theta_bins, hmobject, l_beam=None):
 def fit_xcorr(dndz, xcorr, model='mass'):
 	# initialize halo model
 	hmobj = hm_calcs.halomodel(dndz)
-	ells = np.arange(30, 3000)
+	ells = np.arange(30, 5000)
 	scalebins, scales, corr, err = xcorr['ell_bins'], xcorr['ell'], xcorr['cl'], xcorr['cl_err']
 	unbiasedmod = hmobj.get_c_ell_kg(ells=ells)
 

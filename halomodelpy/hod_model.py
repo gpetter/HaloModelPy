@@ -7,7 +7,8 @@ from scipy import special
 from functools import partial
 import astropy.cosmology.units as cu
 from . import params
-from . import bias_tools
+from . import mcmc
+from . import cosmo
 import camb
 
 paramobj = params.param_obj()
@@ -277,8 +278,45 @@ class halomod_workspace(object):
 		#return f_sat, beff, meff
 		return f_sat, beff
 
+
+def make_fivepar_arr(param_arr, param_ids):
+	"""
+	Pass chain and parameters, construct 5xN array of all Zheng HOD parameters
+	"""
+	default_hod = np.array([12.5, 1e-3, 12.5, 13.5, 1.])
+	outarr = np.repeat([default_hod], len(param_arr), axis=0)
+	if 'M0' not in param_ids:
+		outarr[:, mcmc.paramdict['M0']] = param_arr[:, mcmc.paramdict['M']]
+	for j in range(len(param_ids)):
+		idx = mcmc.paramdict[param_ids[j]]
+		outarr[:, idx] = param_arr[:, j]
+	return outarr
+
+def zheng_hod_5param(paramarr, massgrid=np.logspace(11., 15., 100)):
+	"""
+	Calculate Zheng HODs for 5xN chain of HOD parameters, returns HOD for each parameter set and M in massgrid
+	"""
+	mmin = 10 ** paramarr[:, mcmc.paramdict['M']]
+	m1 = 10 ** paramarr[:, mcmc.paramdict['M1']]
+	sigma = paramarr[:, mcmc.paramdict['sigM']]
+	alpha = paramarr[:, mcmc.paramdict['alpha']]
+	n_cen = 1 / 2. * (1 + special.erf(np.log10(np.outer(massgrid, 1 / mmin)) / sigma))
+	n_sat = np.heaviside(np.subtract.outer(massgrid, mmin), 1) * ((np.subtract.outer(massgrid, mmin) / m1) ** alpha)
+	n_sat[np.where(np.logical_not(np.isfinite(n_sat)))] = 0.
+	outdict = {}
+	outdict['mgrid'] = np.log10(massgrid)
+	outdict['ncen'] = n_cen
+	outdict['nsat'] = n_sat
+	outdict['hod'] = n_cen + n_sat
+
+	return outdict
+
+def zheng_hod_param_ids(params, param_ids, massgrid=np.logspace(11., 15., 100)):
+	fivepar_arr = make_fivepar_arr(params, param_ids)
+	return zheng_hod_5param(fivepar_arr, massgrid=massgrid)
+
 def zheng_hod(params, param_ids, massgrid=np.logspace(11, 15, 100)):
-	from . import mcmc
+
 	logm, logsigm, logm0, logm1, alpha = mcmc.parse_params(params, param_ids)
 	mmin = 10 ** logm
 	m1 = 10 ** logm1
@@ -294,3 +332,29 @@ def zheng_hod(params, param_ids, massgrid=np.logspace(11, 15, 100)):
 	outdict['hod'] = n_cen + n_sat
 
 	return outdict
+
+
+
+
+
+def fsat_dndz(dndz, paramarr, param_ids, massgrid=np.logspace(11, 15, 100)):
+	"""
+	Compute effective satellite fraction over redshift distribution for many HOD posterior draws
+	Eq. 9 Petter et al 2023
+	:param dndz:
+	:param paramarr:
+	:param param_ids:
+	:param massgrid:
+	:return:
+	"""
+	hmf_zs = []
+	zs, zdist = dndz
+	for j in range(len(zs)):
+		hmf_zs.append(cosmo.hmf_z(np.log10(massgrid), zs[j]))
+	hmf_zs = np.array(hmf_zs)
+	hod = zheng_hod_param_ids(params=paramarr, param_ids=param_ids)
+	nsats = np.trapz(np.transpose(np.einsum('ij,jk->ijk', hmf_zs, hod['nsat']), [0, 2, 1]), x=np.log(massgrid))
+	ntot = np.trapz(np.transpose(np.einsum('ij,jk->ijk', hmf_zs, hod['hod']), [0, 2, 1]), x=np.log(massgrid))
+	fsats = np.transpose(nsats / ntot)
+	avg_fsat = np.trapz(fsats*zdist, x=zs)
+	return avg_fsat
