@@ -38,3 +38,10 @@ def rp2ell(rps, z, h_unit=True):
 
 def hmf_z(logM_hubble, z):
 	return paramobj.hmf(10**logM_hubble, z)
+
+def convert_halomass(mass_in, z, def_in, def_out):
+	from colossus.halo import mass_adv
+	mout, r_foo, c_foo = mass_adv.changeMassDefinitionCModel(mass_in, z, mdef_in=def_in,
+															 mdef_out=def_out,
+															 profile='nfw', c_model=paramobj.colossus_c_m)
+	return mout

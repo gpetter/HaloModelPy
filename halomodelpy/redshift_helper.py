@@ -68,3 +68,17 @@ def effective_lensing_z(dndz):
 	#lens_dist = dndz[1] * lensterm
 	#return np.average(dndz[0], weights=lens_dist)
 	#return np.trapz(lens_dist*dndz[0], x=dndz[0])
+
+
+def dz2dvol(zbins):
+	"""
+	calculate comoving volume interval in dz, for converting between dn/dz and n(z), density per volume
+	:param zbins:
+	:return:
+	"""
+	from . import cosmo
+	chis = cosmo.col_cosmo.comovingDistance(np.zeros(len(zbins)), zbins)
+	outershellvols = 4 / 3 * np.pi * chis[1:] ** 3
+	innershellvols = 4 / 3 * np.pi * chis[:-1] ** 3
+	zcenters = interpolate_helper.bin_centers(zbins, method='mean')
+	return zcenters, outershellvols - innershellvols

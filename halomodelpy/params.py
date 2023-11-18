@@ -23,6 +23,7 @@ class param_obj(object):
 		self.mass_def = '200c'
 		self.biasmodel = 'tinker10'
 		self.hmfmodel = 'tinker08'
+		self.colossus_c_m = 'duffy08'
 		self.c_m = 'Duffy08'
 
 		self.bias_relation = partial(bias.haloBias, model=self.biasmodel, mdef=self.mass_def)

@@ -2,8 +2,23 @@ import emcee
 import numpy as np
 from . import hm_calcs
 
+paramlist = ['M', 'sigM', 'M0', 'M1', 'alpha']
 
 paramdict = {'M': 0, 'sigM': 1, 'M0': 2, 'M1':3, 'alpha': 4}
+param_bounds = {'M': (11, 14), 'sigM': (0, 2), 'M0': (11, 14),
+                    'M1': (12, 16), 'alpha': (0.2, 2.5)}
+default_priors = {'M': (None, None), 'sigM': (-0.5, 0.5), 'M0': (None, None),
+                    'M1': (None, None), 'alpha': (1., 0.3)}
+
+use_lognormal_prior = {'M': False, 'sigM': True, 'M0': False,
+                    'M1': False, 'alpha': False}
+
+def ln_normal(x, mean, sig):
+	return np.log(1.0 / (np.sqrt(2*np.pi)*sig)) - 0.5 * ((x - mean) / sig) ** 2
+
+def ln_lognormal(x, mean, sig):
+	return np.log(1.0 / (np.sqrt(2*np.pi) * sig * x)) - 0.5 * ((np.log(x) - mean) / sig) ** 2
+
 
 
 def parse_params(theta, freeparam_ids):
@@ -24,16 +39,19 @@ def parse_params(theta, freeparam_ids):
 
 # log prior function
 def ln_prior(hodparams):
-	mmin = hodparams[0]
-	if (mmin < 11) | (mmin > 14):
-		return -np.inf
-	m1 = hodparams[paramdict['M1']]
-	if (m1 < 12) | (m1 > 15) | (m1 < mmin):
-		return -np.inf
-	alpha = hodparams[paramdict['alpha']]
-	if (alpha < 0.4) | (alpha > 2.5):
-		return -np.inf
-	return 0.
+	priorsum = 0
+	for j in range(len(hodparams)):
+		paramval = hodparams[j]
+		if (paramval <= param_bounds[paramlist[j]][0]) or (paramval >= param_bounds[paramlist[j]][1]):
+			priorsum -= np.inf
+			return priorsum
+		mu_j, sig_j = default_priors[paramlist[j]]
+		if mu_j is not None:
+			if use_lognormal_prior[paramlist[j]]:
+				priorsum += ln_lognormal(paramval, mu_j, sig_j)
+			else:
+				priorsum += ln_normal(paramval, mu_j, sig_j)
+	return priorsum
 
 
 
@@ -143,6 +161,7 @@ def sample_cf_space(nwalkers, niter, cf, dndz, freeparam_ids, initial_params=Non
 
 	# start walkers near least squares fit position with random gaussian offsets
 	pos = np.array(initial_params) + 2e-1 * np.random.normal(size=(sampler.nwalkers, sampler.ndim))
+	pos = clean_chain(pos, freeparam_ids)
 
 	sampler.run_mcmc(pos, niter, progress=True)
 
@@ -201,6 +220,7 @@ def sample_lens_space(nwalkers, niter, xcorr, dndz, freeparam_ids, initial_param
 
 	# start walkers near least squares fit position with random gaussian offsets
 	pos = np.array(initial_params) + 2e-1 * np.random.normal(size=(sampler.nwalkers, sampler.ndim))
+	pos = clean_chain(pos, freeparam_ids)
 
 	sampler.run_mcmc(pos, niter, progress=True)
 
