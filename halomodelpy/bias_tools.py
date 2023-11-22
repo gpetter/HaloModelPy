@@ -1,6 +1,8 @@
 import numpy as np
 from colossus.lss import mass_function
+from scipy import special
 from . import params
+from . import cosmo
 paramobj = params.param_obj()
 mdef = paramobj.mass_def
 bias_relation = paramobj.bias_relation
@@ -53,6 +55,7 @@ def avg_bias_to_mass(input_bias, zs, dndz, berr=0):
 # calculate a bias corresponding to a minimum halo mass required to host a tracer
 # e.g. Petter et al 2023 Eq. 19
 def minmass_to_bias_z(log_minmass, zs):
+	zs = np.atleast_1d(zs)
 	# grid from given minimum mass to high mass where HMF --> 0
 	massgrid = np.logspace(log_minmass, 15, 100)
 	beffs = []
@@ -82,6 +85,25 @@ def bias_to_minmass(dndz, bias, minmass_grid=np.linspace(12., 14.5, 50)):
 	for j in range(len(minmass_grid)):
 		biases_for_minmasses.append(minmass_to_bias(dndz, minmass_grid[j]))
 	return np.interp(bias, biases_for_minmasses, minmass_grid)
+
+def ncen_zheng(logMmin, sigma):
+	return 1 / 2. * (1 + special.erf(np.log10(paramobj.mass_space / (10**logMmin)) / sigma))
+
+def mass_transition2bias_z(logMmin, sigma, zs):
+	zs = np.atleast_1d(zs)
+	hod = ncen_zheng(logMmin, sigma)
+	beffs = []
+	for z in zs:
+		hmf = cosmo.hmf_z(logM_hubble=np.log10(paramobj.mass_space), z=z)
+		bm_z = bias_relation(M=paramobj.mass_space, z=z)
+		beffs.append(np.trapz(bm_z * hmf * hod, x=np.log(paramobj.mass_space)) /
+					np.trapz(hmf * hod, x=np.log(paramobj.mass_space)))
+	return np.array(beffs)
+
+def mass_transition2bias(dndz, logMmin, sigma):
+	beffs = mass_transition2bias_z(logMmin=logMmin, sigma=sigma, zs=dndz[0])
+	# average over redshifts is integral over dN/dz
+	return np.trapz(np.array(beffs) * np.array(dndz[1]), x=dndz[0])
 
 
 # calculate bias predicted by parameterizations of quasar bias as function of redshift given by

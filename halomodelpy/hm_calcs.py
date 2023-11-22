@@ -345,7 +345,7 @@ class halomodel(object):
 
 	# reset the power spectrum according to an HOD if provided, or an effective mass-biased spectrum
 	def set_powspec(self, hodparams=None, hodparams2=None, log_meff=None, log_meff_2=None,
-					bias1=None, bias2=None, log_m_min1=None, log_m_min2=None,
+					bias1=None, bias2=None, log_m_min1=None, log_m_min2=None, sigma1=None, sigma2=None,
 					get1h=True, get2h=True):
 
 		if hodparams is not None:
@@ -364,10 +364,16 @@ class halomodel(object):
 			self.bzs = np.sqrt(bz * bz2)
 		# if halos with masses > M_min
 		elif log_m_min1 is not None:
-			bz = bias_tools.minmass_to_bias_z(log_minmass=log_m_min1, zs=self.zs)
+			if sigma1 is None:
+				bz = bias_tools.minmass_to_bias_z(log_minmass=log_m_min1, zs=self.zs)
+			else:
+				bz = bias_tools.mass_transition2bias_z(logMmin=log_m_min1, sigma=sigma1, zs=self.zs)
 			bz2 = bz
 			if log_m_min2 is not None:
-				bz2 = bias_tools.minmass_to_bias_z(log_minmass=log_m_min2, zs=self.zs)
+				if sigma2 is None:
+					bz2 = bias_tools.minmass_to_bias_z(log_minmass=log_m_min2, zs=self.zs)
+				else:
+					bz2 = bias_tools.mass_transition2bias_z(logMmin=log_meff_2, sigma=sigma2, zs=self.zs)
 			self.pk_z = (bz * bz2)[:, None] * self.lin_pk_z
 			self.bzs = np.sqrt(bz * bz2)
 		# or a simple constant bias with redshift
