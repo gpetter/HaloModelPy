@@ -9,52 +9,95 @@ bias_relation = paramobj.bias_relation
 
 
 def mass2bias(logmh, z):
+	"""
+	Convert halo mass to bias at redshift
+	:param logmh: log10(Halo mass) (hubble units)
+	:param z: redshift
+	:return: bias
+	"""
 	return bias_relation(M=10**logmh, z=z)
 
 
 def bias2mass(inputbias, z):
+	"""
+	Convert bias to halo mass at redshift
+	:param inputbias: bias
+	:param z: redshift
+	:return: log10(halo mass) (hubble units)
+	"""
+	# grid of masses for interpolation
 	masses = np.logspace(10, 15, 1000)
-	biases_from_masses = bias_relation(M=masses, z=z)
+	# convert to biases
+	biases_from_masses = mass2bias(np.log10(masses), z)
+	# interpolate in log mass space
 	return np.interp(inputbias, biases_from_masses, np.log10(masses))
 
 
-# take a characteristic halo mass and calculate the resulting average bias over a given redshift distribution
-def mass_to_avg_bias(log_m, zs, dndz, log_merr=None):
+def mass_to_avg_bias(log_mh, zs, dndz, log_merr=None):
+	"""
+	take a characteristic halo mass and calculate the resulting average bias over a given redshift distribution
+	:param log_mh: log10(Halo mass) (hubble units)
+	:param zs: redshifts array
+	:param dndz: redshift distribution array
+	:param log_merr: optionally, error in log(mass)
+	:return: effective bias
+	"""
 
-	bh = bias_relation(M=10 ** log_m, z=zs)
+	# bias for each z
+	bh = mass2bias(logmh=log_mh, z=zs)
 
+	# effective bias is integral over b*dn/dz
 	avg_bh = np.trapz(bh*dndz, x=zs)
+	# if wanting error in bias
 	if log_merr is not None:
-		bh_plus = bias_relation(M=10 ** (log_m+log_merr[0]), z=zs)
-		bh_minus = bias_relation(M=10 ** (log_m-log_merr[1]), z=zs)
+		bh_plus = bias_relation(M=10 ** (log_mh+log_merr[0]), z=zs)
+		bh_minus = bias_relation(M=10 ** (log_mh-log_merr[1]), z=zs)
 		avg_bh_err = np.mean([bh_plus - avg_bh, avg_bh - bh_minus])
 		return avg_bh, avg_bh_err
 
 	return avg_bh
 
 
-# take a bias measured over a redshift distribution and calculate which characteristic halo mass would
-# result in the measured bias
+
 def avg_bias_to_mass(input_bias, zs, dndz, berr=0):
+	"""
+	take a bias measured over a redshift distribution and calculate which characteristic halo mass would
+	result in the measured bias
+	:param input_bias:
+	:param zs: redshifts array
+	:param dndz: redshift distribution array
+	:param berr: optional bias uncertainty
+	:return:
+	"""
 
-
+	# mass grid
 	masses = np.log10(np.logspace(10, 15, 500))
 	b_avg = []
+	# get effective bias over dn/dz for each mass in grid
 	for mass in masses:
 		b_avg.append(mass_to_avg_bias(mass, zs, dndz))
 
+	# if bias error passed
 	if berr > 0:
 		upmass = np.interp(input_bias+berr, b_avg, masses)
 		lomass = np.interp(input_bias-berr, b_avg, masses)
 		mass = np.interp(input_bias, b_avg, masses)
 		return mass, mass-lomass, upmass-mass
 	else:
+		# interpolate grid to get effective mass
 		return np.interp(input_bias, b_avg, masses)
 
 
-# calculate a bias corresponding to a minimum halo mass required to host a tracer
-# e.g. Petter et al 2023 Eq. 19
+
 def minmass_to_bias_z(log_minmass, zs):
+	"""
+	calculate a bias corresponding to a minimum halo mass required to host a tracer
+	e.g. Petter et al 2023 Eq. 19
+	Involves integral over halo mass function
+	:param log_minmass: minimum mass in log Hubble units
+	:param zs: redshift array
+	:return: b(z) corresponding to minimum mass
+	"""
 	zs = np.atleast_1d(zs)
 	# grid from given minimum mass to high mass where HMF --> 0
 	massgrid = np.logspace(log_minmass, 15, 100)
@@ -62,14 +105,19 @@ def minmass_to_bias_z(log_minmass, zs):
 	# for each redshift
 	for z in zs:
 		# effective bias at redshift is integral of HMF(M, z)*bias(M, z)*dM
-		# TODO retrieve hmf from params.py
-		mfunc = mass_function.massFunction(massgrid, z, mdef='200c', model='tinker08', q_out='dndlnM')
+		mfunc = paramobj.hmf(massgrid, z)
 		bm_z = bias_relation(M=massgrid, z=z)
 		beffs.append(np.trapz(bm_z * mfunc, x=np.log(massgrid)) / np.trapz(mfunc, x=np.log(massgrid)))
 	return np.array(beffs)
 
 
 def minmass_to_bias(dndz, log_minmass):
+	"""
+	Compute effective bias integrated over redshift distribution from minimum halo mass
+	:param dndz: tuple (zs, dn/dz)
+	:param log_minmass: minimum mass in log Hubble units
+	:return:
+	"""
 
 	zs, dndzs = dndz
 	beffs = minmass_to_bias_z(log_minmass, zs)
@@ -78,8 +126,15 @@ def minmass_to_bias(dndz, log_minmass):
 	return np.trapz(np.array(beffs) * np.array(dndzs), x=zs)
 
 
-# go from effective bias to minimum host halo mass by inverting above function
+#
 def bias_to_minmass(dndz, bias, minmass_grid=np.linspace(12., 14.5, 50)):
+	"""
+	go from effective bias to minimum host halo mass by inverting above function
+	:param dndz: go from effective bias to minimum host halo mass by inverting above function
+	:param bias: effective bias
+	:param minmass_grid: grid of minimum masses in log Hubble units
+	:return: minimum mass corresponding to effective bias
+	"""
 
 	biases_for_minmasses = []
 	for j in range(len(minmass_grid)):
@@ -87,9 +142,22 @@ def bias_to_minmass(dndz, bias, minmass_grid=np.linspace(12., 14.5, 50)):
 	return np.interp(bias, biases_for_minmasses, minmass_grid)
 
 def ncen_zheng(logMmin, sigma):
+	"""
+	Central occupation function from Zheng+07, a softened step function
+	:param logMmin:
+	:param sigma:
+	:return:
+	"""
 	return 1 / 2. * (1 + special.erf(np.log10(paramobj.mass_space / (10**logMmin)) / sigma))
 
 def mass_transition2bias_z(logMmin, sigma, zs):
+	"""
+	Predict the b(z) corresponding to a (softened) step function HOD
+	:param logMmin: minimum mass to host galaxy, log Hubble units
+	:param sigma: smoothing parameter
+	:param zs: redshift array
+	:return: b(z)
+	"""
 	zs = np.atleast_1d(zs)
 	hod = ncen_zheng(logMmin, sigma)
 	beffs = []
@@ -101,14 +169,49 @@ def mass_transition2bias_z(logMmin, sigma, zs):
 	return np.array(beffs)
 
 def mass_transition2bias(dndz, logMmin, sigma):
+	"""
+	Predict the effective bias for a (softened) step function HOD over a redshift distribution
+	:param dndz: tuple (zs, dndz)
+	:param logMmin: minimum mass to host galaxy, log Hubble units
+	:param sigma: smoothing parameter
+	:return: effective bias
+	"""
 	beffs = mass_transition2bias_z(logMmin=logMmin, sigma=sigma, zs=dndz[0])
 	# average over redshifts is integral over dN/dz
 	return np.trapz(np.array(beffs) * np.array(dndz[1]), x=dndz[0])
 
+def avg_bias2mass_transition(dndz, b, sigma, berr=0.):
+	"""
+	Invert above function, go from an effective bias to a transition HOD mass
+	:param dndz: tuple (zs, dndz)
+	:param b: bias
+	:param sigma: smoothing parameter
+	:param berr: Optional bias error
+	:return: 
+	"""
+	ms = np.linspace(11., 14.5, 100)
+	bs = []
+	for m in ms:
+		bs.append(mass_transition2bias(dndz=dndz, logMmin=m, sigma=sigma))
+	mtrans = np.interp(b, bs, ms)
+	mupp, mlo = 0, 0
+	if berr > 0:
+		mupp = np.interp(b + berr, bs, ms) - mtrans
+		mlo = mtrans - np.interp(b - berr, bs, ms)
+	return mtrans, mlo, mupp
 
-# calculate bias predicted by parameterizations of quasar bias as function of redshift given by
-# Croom et al 2005 or Laurent et al. 2017
+
+
 def qso_bias_for_z(paper, zs, dndz=None, n_draws=100):
+	"""
+	calculate bias predicted by parameterizations of quasar bias as function of redshift given by
+	Croom et al 2005 or Laurent et al. 2017
+	:param paper: 'laurent' or 'croom' for Laurent et al. 2017 or Croom et al. 2005
+	:param zs: redshift array
+	:param dndz: redshift distribution
+	:param n_draws: Number of random draws to estimate uncertainty
+	:return: bias as a function of redshift from the paper
+	"""
 
 	if paper == 'laurent':
 		a0, a1, a2 = 2.393, 0.278, 6.565
@@ -142,6 +245,10 @@ def qso_bias_for_z(paper, zs, dndz=None, n_draws=100):
 
 
 def qso_mass_for_z(paper, zs, dndz=None, n_draws=100):
+	"""
+	convert bias predicted from qso_bias_for_z into effective halo mass
+	:return:
+	"""
 	b, berr = qso_bias_for_z(paper, zs, dndz, n_draws)
 	m, mhi, mlo = [], [], []
 	for j in range(len(zs)):
