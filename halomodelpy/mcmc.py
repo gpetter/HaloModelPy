@@ -86,23 +86,21 @@ def ln_likelihood(residual, yerr):
 
 
 # log probability is prior plus likelihood
-def ln_prob_cf(theta, cf, freeparam_ids, hmobj):
-
+def ln_prob_cf(theta, cf, freeparam_ids, hmobj, xcorr_chain):
 	hodparams = parse_params(theta, freeparam_ids)
 	prior = ln_prior(hodparams)
+	hodparams2 = None
+	if xcorr_chain is not None:
+		xcorr_link = np.random.choice(len(xcorr_chain), 1)
+		hodparams2 = parse_params(xcorr_link, freeparam_ids)
+
 	if prior > -np.inf:
-
-
-		hmobj.set_powspec(hodparams=hodparams)
+		hmobj.set_powspec(hodparams=hodparams, hodparams2=hodparams2)
 		# keep track of derived parameters like satellite fraction, effective bias, effective mass
 		#derived = (hod_model.derived_parameters(zs, dndz, theta, modeltype))
 		#derived = hmobj.hm.derived_parameters(dndz=dndz)
 
-
 		# get model prediciton for given parameter set
-		#modelprediction = clusteringModel.angular_corr_func_in_bins(anglebins, zs=zs, dn_dz_1=dndz,
-		#                                                            hodparams=theta,
-		#                                                            hodmodel=modeltype)
 		y, yerr, modelprediction = parse_cf(cf=cf, hm_ob=hmobj)
 
 		# residual is data - model
@@ -159,7 +157,7 @@ def clean_chain(chain, ids):
 
 
 
-def sample_cf_space(nwalkers, niter, cf, dndz, freeparam_ids, initial_params=None, pool=None):
+def sample_cf_space(nwalkers, niter, cf, dndz, freeparam_ids, initial_params=None, pool=None, xcorr_chain=None):
 
 	ndim = len(freeparam_ids)
 	#blobs_dtype = [("f_sat", float), ("b_eff", float), ("m_eff", float)]
@@ -170,7 +168,7 @@ def sample_cf_space(nwalkers, niter, cf, dndz, freeparam_ids, initial_params=Non
 
 
 	sampler = emcee.EnsembleSampler(nwalkers, ndim, ln_prob_cf,
-									args=[cf, freeparam_ids, halomod_obj],
+									args=[cf, freeparam_ids, halomod_obj, xcorr_chain],
 	                                pool=pool)
 
 
