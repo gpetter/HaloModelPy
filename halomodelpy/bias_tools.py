@@ -187,7 +187,7 @@ def avg_bias2mass_transition(dndz, b, sigma, berr=0.):
 	:param b: bias
 	:param sigma: smoothing parameter
 	:param berr: Optional bias error
-	:return: 
+	:return:
 	"""
 	ms = np.linspace(11., 14.5, 100)
 	bs = []

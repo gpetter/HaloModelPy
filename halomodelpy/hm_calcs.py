@@ -85,13 +85,13 @@ def hamilton_j_interp(xi, sgrid, ss, n):
 	return lambda zz: np.transpose(lin_interp(np.log10(zz)))
 
 def xi_monopole(xi, beta):
-	return (1 + 2/3 * beta + 1/5 * beta ** 2) * xi
+	return (1. + 2./3. * beta + 1./5. * beta ** 2.) * xi
 
 def xi_quadrupole(s, xi, beta, j3, bz):
-	return (4/3 * beta + 4/7 * beta ** 2) * (xi - 3 * (bz ** 2 * j3(s)) / s ** 3)
+	return (4./3. * beta + 4./7. * beta ** 2.) * (xi - 3. * (bz ** 2. * j3(s)) / s ** 3.)
 
 def xi_hexadecapole(s, xi, beta, j3, j5, bz):
-	return 8/35 * beta ** 2 * (xi + 15/(2 * s ** 3) * (bz ** 2 * j3(s)) - 35/(2 * s ** 5) * (bz ** 2 * j5(s)))
+	return 8./35. * beta ** 2. * (xi + 15./(2. * s ** 3) * (bz ** 2. * j3(s)) - 35./(2. * s ** 5.) * (bz ** 2. * j5(s)))
 
 
 
@@ -104,7 +104,6 @@ def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_z, H_z):
 
 	# convert input thetas to radians from degrees
 	thetas = (thetas * u.deg).to('radian').value
-
 
 	# Hankel transform power spectra at different redshifts to correlation functions which we will project to angular
 	# space
@@ -165,7 +164,7 @@ def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, projected=True):
 
 	return np.trapz(dndz[1] * np.transpose(interpedxis), x=dndz[0], axis=1)
 
-def pk_z_to_xi_rp_pi(pk_z, dndz, beta_z, bz, rps, pis, k_grid, j3, j5, sigchi=None, mono=True, quad=True, hex=True):
+def pk_z_to_xi_rp_pi(pk_z, dndz, beta_z, bz, rps, pis, k_grid, j3, j5, sigchi=None, mono=True, quad=True, hexa=True):
 	rp_grid, pi_grid = np.meshgrid(rps, pis)
 	s_grid = np.sqrt(rp_grid ** 2 + pi_grid ** 2).ravel()
 	mu_grid = rp_grid.ravel() / s_grid
@@ -183,7 +182,7 @@ def pk_z_to_xi_rp_pi(pk_z, dndz, beta_z, bz, rps, pis, k_grid, j3, j5, sigchi=No
 		xi2 = xi_quadrupole(s_grid, interpedxis, beta_z, j3, bz)
 	else:
 		xi2 = np.zeros_like(interpedxis)
-	if hex:
+	if hexa:
 		xi4 = xi_hexadecapole(s_grid, interpedxis, beta_z, j3, j5, bz)
 	else:
 		xi4 = np.zeros_like(interpedxis)
@@ -437,16 +436,21 @@ class halomodel(object):
 								 beta_z=beta_param(self.bzs, self.zs), bz=self.bzs,
 								 s=s, k_grid=self.k_grid, j3=self.j3, j5=self.j5, ell=ell)
 
-	def get_xi_rp_pi(self, rp, pi, sigz=None, mono=True, quad=True, hex=True):
+	def get_binned_multipole(self, s_bins, ell=0):
+		s_grid = np.logspace(np.log10(np.min(s_bins) / 2.), np.log10(np.max(s_bins) * 2.), 100)
+		xi_s = self.get_multipole(s=s_grid, ell=ell)
+		return stats.binned_statistic(s_grid, xi_s, statistic='mean', bins=s_bins)[0]
+
+	def get_xi_rp_pi(self, rp, pi, sigz=None, mono=True, quad=True, hexa=True):
 		sig_chi = None
 		if sigz is not None:
 			sig_chi = np.average(self.dchidz * sigz)
 		return pk_z_to_xi_rp_pi(pk_z=self.pk_z, dndz=self.dndz, beta_z=beta_param(self.bzs, self.zs), bz=self.bzs,
 								rps=rp, pis=pi, k_grid=self.k_grid, j3=self.j3, j5=self.j5, sigchi=sig_chi,
-								mono=mono, quad=quad, hex=hex)
+								mono=mono, quad=quad, hexa=hexa)
 
-	def get_xi_s(self, rp, pi, s_bins, sigz=None, wedges=None, mono=True, quad=True, hex=True):
-		xirppi = self.get_xi_rp_pi(rp=rp, pi=pi, sigz=sigz, mono=mono, quad=quad, hex=hex)
+	def get_xi_s(self, rp, pi, s_bins, sigz=None, wedges=None, mono=True, quad=True, hexa=True):
+		xirppi = self.get_xi_rp_pi(rp=rp, pi=pi, sigz=sigz, mono=mono, quad=quad, hexa=hexa)
 		xi_s = anisotropic2multipole(xirppi=xirppi, rps=rp, pis=pi, s_bins=s_bins, wedges=wedges)
 		return xi_s
 	"""def get_multipole(self, s, ell=0):

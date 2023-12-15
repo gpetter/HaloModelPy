@@ -13,6 +13,7 @@ default_priors = {'M': (None, None), 'sigM': (-0.5, 0.5), 'M0': (None, None),
 use_lognormal_prior = {'M': False, 'sigM': True, 'M0': False,
                     'M1': False, 'alpha': False}
 
+
 def ln_normal(x, mean, sig):
 	return np.log(1.0 / (np.sqrt(2*np.pi)*sig)) - 0.5 * ((x - mean) / sig) ** 2
 
@@ -34,7 +35,21 @@ def parse_params(theta, freeparam_ids):
 		hodparams[paramdict['M1']] = 1. + theta[0]
 	return hodparams
 
+def parse_cf(cf, hm_ob):
+	if 'theta_bins' in cf.keys():
+		anglebins = cf['theta_bins']
+		y = cf['w_theta']
+		yerr = cf['w_err']
+		modelprediction = hm_ob.get_binned_ang_cf(theta_bins=anglebins)
 
+	elif 'rp_bins' in cf.keys():
+		rp_bins = cf['rp_bins']
+		y = cf['wp']
+		yerr = cf['wp_err']
+		modelprediction = hm_ob.get_binned_spatial_cf(radius_bins=rp_bins)
+	else:
+		print('inspect cf dict')
+	return y, yerr, modelprediction
 
 
 # log prior function
@@ -72,12 +87,12 @@ def ln_likelihood(residual, yerr):
 
 # log probability is prior plus likelihood
 def ln_prob_cf(theta, cf, freeparam_ids, hmobj):
-	anglebins = cf['theta_bins']
-	y = cf['w_theta']
-	yerr = cf['w_err']
+
 	hodparams = parse_params(theta, freeparam_ids)
 	prior = ln_prior(hodparams)
 	if prior > -np.inf:
+
+
 		hmobj.set_powspec(hodparams=hodparams)
 		# keep track of derived parameters like satellite fraction, effective bias, effective mass
 		#derived = (hod_model.derived_parameters(zs, dndz, theta, modeltype))
@@ -88,7 +103,7 @@ def ln_prob_cf(theta, cf, freeparam_ids, hmobj):
 		#modelprediction = clusteringModel.angular_corr_func_in_bins(anglebins, zs=zs, dn_dz_1=dndz,
 		#                                                            hodparams=theta,
 		#                                                            hodmodel=modeltype)
-		modelprediction = hmobj.get_binned_ang_cf(theta_bins=anglebins)
+		y, yerr, modelprediction = parse_cf(cf=cf, hm_ob=hmobj)
 
 		# residual is data - model
 		residual = y - modelprediction
