@@ -72,6 +72,7 @@ def d_chi_dz(zs, chizfunc, littleh_units=True):
 	return lambda zz: interp1d(zs, dchidz)(zz)
 
 
+
 def beta_param(bs, zs):
 	return apcosmo.Om(zs) ** 0.56 / bs
 
@@ -313,7 +314,7 @@ class halomodel(object):
 		if dndz2 is not None:
 
 			dndz2 = redshift_helper.norm_z_dist(dndz2)
-			if not np.array_equal(self.zs, dndz2[0]):
+			if not np.allclose(self.zs, dndz2[0], atol=0.01):
 				print(self.zs)
 				print(dndz2[0])
 				print('Redshift distribution grids do not match')

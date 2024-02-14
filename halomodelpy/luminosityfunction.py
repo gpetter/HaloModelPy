@@ -80,7 +80,7 @@ def int_lf_over_z_and_l(dndL, dndz, nu=None):
 
     return dens_hunit
 
-def int_hmf(z, logminmass, massgrid=np.logspace(11, 16, 5000)):
+def int_hmf(z, logminmass, massgrid=np.logspace(11, 16, 5000), logmaxmass=16.):
     """
     Number density of halos more massive than logminmass at redshift z
     :param z:
@@ -90,13 +90,13 @@ def int_hmf(z, logminmass, massgrid=np.logspace(11, 16, 5000)):
     """
     mfunc = cosmo.hmf_z(np.log10(massgrid), z)
     # number of halos more massive than M is integral of HMF from M to inf
-    occupiedidxs = np.where(np.log10(massgrid) > logminmass)
+    occupiedidxs = np.where((np.log10(massgrid) > logminmass) & (np.log10(massgrid) <= logmaxmass))
     mfunc, newgrid = mfunc[occupiedidxs], massgrid[occupiedidxs]
     int_at_z = np.trapz(mfunc, x=np.log(newgrid))
     return int_at_z
 
 #
-def int_hmf_z(dndz, logminmass, massgrid=np.logspace(11, 16, 5000)):
+def int_hmf_z(dndz, logminmass, massgrid=np.logspace(11, 16, 5000), logmaxmass=16.):
     """
     integrate HMF over redshift for average space density of halos
     Parameters
@@ -116,11 +116,11 @@ def int_hmf_z(dndz, logminmass, massgrid=np.logspace(11, 16, 5000)):
     # for each redshift in grid
     for z in zs:
 
-        ints_at_zs.append(int_hmf(z, logminmass, massgrid=massgrid))
+        ints_at_zs.append(int_hmf(z, logminmass, massgrid=massgrid, logmaxmass=logmaxmass))
 
     return np.trapz(np.array(ints_at_zs)*dndz, x=zs)
 
-def hmf_zrange(zrange, logminmass):
+def hmf_zrange(zrange, logminmass, logmaxmass=16.):
     """
     Integrate HMF above log min mass, over a redshift range, assuming constant dN/dz
     :param zrange:
@@ -128,7 +128,7 @@ def hmf_zrange(zrange, logminmass):
     :return:
     """
     dndz = redshift_helper.dndz_from_z_list(np.random.uniform(zrange[0], zrange[1], 10000), 10)
-    return int_hmf_z(dndz=dndz, logminmass=logminmass)
+    return int_hmf_z(dndz=dndz, logminmass=logminmass, logmaxmass=logmaxmass)
 
 def occupation_fraction(dndL, dndz, logminmasses, nu=None, logmin_errs=None):
     """

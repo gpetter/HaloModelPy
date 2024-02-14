@@ -127,7 +127,7 @@ def minmass_to_bias(dndz, log_minmass):
 
 
 #
-def bias_to_minmass(dndz, bias, minmass_grid=np.linspace(12., 14.5, 50)):
+def bias_to_minmass(dndz, bias, minmass_grid=np.linspace(11., 14.5, 100)):
 	"""
 	go from effective bias to minimum host halo mass by inverting above function
 	:param dndz: go from effective bias to minimum host halo mass by inverting above function
@@ -140,6 +140,22 @@ def bias_to_minmass(dndz, bias, minmass_grid=np.linspace(12., 14.5, 50)):
 	for j in range(len(minmass_grid)):
 		biases_for_minmasses.append(minmass_to_bias(dndz, minmass_grid[j]))
 	return np.interp(bias, biases_for_minmasses, minmass_grid)
+
+def avg_bias2min_mass(dndz, b, berr=0):
+	"""
+
+	:param dndz: tuple (zs, dndz)
+	:param b: bias
+	:param sigma: smoothing parameter
+	:param berr: Optional bias error
+	:return:
+	"""
+	mmin = bias_to_minmass(dndz=dndz, bias=b)
+	mupp, mlo = 0, 0
+	if berr > 0:
+		mupp = bias_to_minmass(dndz=dndz, bias=(b+berr)) - mmin
+		mlo = mmin - bias_to_minmass(dndz=dndz, bias=(b-berr))
+	return mmin, mlo, mupp
 
 def ncen_zheng(logMmin, sigma):
 	"""
