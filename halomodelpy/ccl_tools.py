@@ -65,7 +65,11 @@ class HOD_model(object):
 	def hod_profile(self, hodparams):
 		if hodparams is None:
 			return None
+		# unpack parameters
 		mmin, sigm, m0, m1, alpha = hodparams
+		# CCL defines sigma with natural log, Zheng uses log10, convert back
+		sigm = np.log(10 ** sigm)
+		# input parameters will have little h units, but CCL uses plain units, so convert
 		mmin, m0, m1 = hubbleunits.remove_h_from_logmass([mmin, m0, m1])
 		return ccl.halos.profiles.HaloProfileHOD(c_M_relation=self.c_m_relation, lMmin_0=mmin,
 		                siglM_0=sigm, lM0_0=m0, lM1_0=m1, alpha_0=alpha)

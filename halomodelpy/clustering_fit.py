@@ -82,7 +82,7 @@ def fit_cf(dndz, cf, model='mass'):
 		angular = True
 		scalebins, corr, err = cf['theta_bins'], cf['w_theta'], cf['w_err']
 	if angular:
-		modscales = np.logspace(-2.5, 0, 200)
+		modscales = np.logspace(-2.5, 0.25, 200)
 		unbiasedmod = hmobj.get_ang_cf(modscales)
 	else:
 		modscales = np.logspace(-1, 2.3, 200)
@@ -147,7 +147,7 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 	xcorr, xerr = xcorr[goodidx], xerr[goodidx]
 
 	if angular:
-		modscales = np.logspace(-2.5, 0, 200)
+		modscales = np.logspace(-2.5, 0.25, 200)
 		unbiasedmod = hmobj.get_ang_cf(modscales)
 	else:
 		modscales = np.logspace(-1, 2.3, 200)

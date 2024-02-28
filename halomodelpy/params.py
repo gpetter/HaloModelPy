@@ -6,8 +6,8 @@ from colossus.lss import mass_function
 
 class param_obj(object):
 	def __init__(self):
-		self.logk_min = -4
-		self.logk_max = 2
+		self.logk_min = -5
+		self.logk_max = 3
 		self.nks = 256
 
 		self.cmb_z = 1090.
