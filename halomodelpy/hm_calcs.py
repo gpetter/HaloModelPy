@@ -1,7 +1,7 @@
 import numpy as np
 import astropy.units as u
 import mcfit
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, RegularGridInterpolator
 import astropy.constants as const
 import astropy.cosmology.units as cu
 from functools import partial
@@ -114,7 +114,7 @@ def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_z, H_z):
 	input_theta_chis = np.outer(chi_z, thetas)
 
 	# for each redshift, chi(z), interpolate the result of the above integral onto theta*chi(z) grid
-	interped_dipomp = []
+	"""interped_dipomp = []
 	for j in range(len(dndz[0])):
 		# trick for interpolation for function varying in log space (propto r^-2)
 		# multiply result of Hankel transform by theta*chi, this makes it pretty smooth in linear space
@@ -122,14 +122,25 @@ def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_z, H_z):
 		flatpower = dipomp_int[j] * thetachis
 		interped_dipomp.append(interp1d(thetachis, flatpower)(input_theta_chis[j]) /
 							   input_theta_chis[j])
-	interped_dipomp = np.array(interped_dipomp)
+	interped_dipomp = np.transpose(np.array(interped_dipomp))"""
+
+	# trick for interpolation for function varying in log space (propto r^-2)
+	# multiply result of Hankel transform by theta*chi, this makes it pretty smooth in linear space
+	# then divide it back out at end
+	flatpower = dipomp_int * thetachis
+
+	input_theta_chis = np.transpose(input_theta_chis)
+
+	interpolator = RegularGridInterpolator((dndz[0], np.log10(thetachis)), flatpower)
+	interped_dipomp = interpolator((dndz[0], np.log10(input_theta_chis))) / input_theta_chis
+
 
 	dz_d_chi = (H_z / const.c.to(u.km / u.s).value)
 	# product of redshift distributions, and dz/dchi
 	differentials = dz_d_chi * dndz[1] ** 2
 
 	# integrate over redshift kernel to get w(theta) a la Dipompeo+2017
-	return 1 / (2 * np.pi) * np.trapz(differentials * np.transpose(interped_dipomp), x=dndz[0], axis=1)
+	return 1 / (2 * np.pi) * np.trapz(differentials * interped_dipomp, x=dndz[0], axis=1)
 
 
 def pk_z_to_cl_gg(pk_z, dndz, ells, k_grid, chi_z, H_z):

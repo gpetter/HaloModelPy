@@ -18,6 +18,8 @@ param_keys = {'logMmin': 0, 'alpha': 1, 'logM1': 2}
 mass_grid = paramobj.mass_space
 k_grid = paramobj.k_space
 
+zhengobj = mcmc.zhengHODsampler()
+
 
 # mass-concentration relation
 def concentration_from_mass(masses, z):
@@ -286,9 +288,9 @@ def make_fivepar_arr(param_arr, param_ids):
 	default_hod = np.array([12.5, 1e-3, 12.5, 13.5, 1.])
 	outarr = np.repeat([default_hod], len(param_arr), axis=0)
 	if 'M0' not in param_ids:
-		outarr[:, mcmc.paramdict['M0']] = param_arr[:, mcmc.paramdict['M']]
+		outarr[:, zhengobj.paramdict['M0']] = param_arr[:, zhengobj.paramdict['M']]
 	for j in range(len(param_ids)):
-		idx = mcmc.paramdict[param_ids[j]]
+		idx = zhengobj.paramdict[param_ids[j]]
 		outarr[:, idx] = param_arr[:, j]
 	return outarr
 
@@ -296,10 +298,10 @@ def zheng_hod_5param(paramarr, massgrid=np.logspace(11., 15., 100)):
 	"""
 	Calculate Zheng HODs for 5xN chain of HOD parameters, returns HOD for each parameter set and M in massgrid
 	"""
-	mmin = 10 ** paramarr[:, mcmc.paramdict['M']]
-	m1 = 10 ** paramarr[:, mcmc.paramdict['M1']]
-	sigma = paramarr[:, mcmc.paramdict['sigM']]
-	alpha = paramarr[:, mcmc.paramdict['alpha']]
+	mmin = 10 ** paramarr[:, zhengobj.paramdict['M']]
+	m1 = 10 ** paramarr[:, zhengobj.paramdict['M1']]
+	sigma = paramarr[:, zhengobj.paramdict['sigM']]
+	alpha = paramarr[:, zhengobj.paramdict['alpha']]
 	n_cen = 1 / 2. * (1 + special.erf(np.log10(np.outer(massgrid, 1 / mmin)) / sigma))
 	n_sat = np.heaviside(np.subtract.outer(massgrid, mmin), 1) * ((np.subtract.outer(massgrid, mmin) / m1) ** alpha)
 	n_sat[np.where(np.logical_not(np.isfinite(n_sat)))] = 0.
@@ -317,7 +319,7 @@ def zheng_hod_param_ids(params, param_ids, massgrid=np.logspace(11., 15., 100)):
 
 def zheng_hod(params, param_ids, massgrid=np.logspace(11, 15, 100)):
 
-	logm, logsigm, logm0, logm1, alpha = mcmc.parse_params(params, param_ids)
+	logm, logsigm, logm0, logm1, alpha = zhengobj.parse_params(params, param_ids)
 	mmin = 10 ** logm
 	m1 = 10 ** logm1
 	# fix softening parameter

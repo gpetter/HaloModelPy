@@ -243,14 +243,31 @@ def xfit_pipeline(dndz_x, cf_x, dndz_auto, autocf):
 
 	return outdict
 
-def fitmcmc(nwalkers, niter, dndz, cf, freeparam_ids, initial_params):
+def fitmcmc(nwalkers, niter, dndz, cf, freeparam_ids, initial_params, prior_dict=None):
 	from . import mcmc
 	from . import plotscripts
 	outdict = {}
-	chain = mcmc.sample_cf_space(nwalkers=nwalkers, niter=niter, dndz=dndz, cf=cf,
+	mcmc_obj = mcmc.zhengHODsampler()
+	if prior_dict is not None:
+		mcmc_obj.update_priors(priordict=prior_dict)
+	chain = mcmc_obj.sample_cf_space(nwalkers=nwalkers, niter=niter, dndz=dndz, cf=cf,
 								 freeparam_ids=freeparam_ids, initial_params=initial_params)
 	outdict['chain'] = chain
 	outdict['corner'] = plotscripts.hod_corner(chain=chain, param_ids=freeparam_ids)
 	#outdict['hods'] = plotscripts.hod_realizations(chain=chain, param_ids=freeparam_ids)
 
+	return outdict
+
+def fit_xcorr_mcmc(nwalkers, niter, dndz_x, dndz_ref, xcf, ref_hod_chain, freeparam_ids,
+				   initial_params, prior_dict=None):
+	from . import mcmc
+	outdict = {}
+	mcmc_obj = mcmc.zhengHODsampler()
+	if prior_dict is not None:
+		mcmc_obj.update_priors(priordict=prior_dict)
+	chain = mcmc_obj.sample_xcf_space(nwalkers=nwalkers, niter=niter, xcf=xcf, dndz_x=dndz_x, dndz_ref=dndz_ref,
+								  ref_hod_chain=ref_hod_chain,
+								  freeparam_ids=freeparam_ids, initial_params=initial_params)
+	outdict['chain'] = chain
+	#outdict['corner'] = plotscripts.hod_corner(chain=chain, param_ids=freeparam_ids)
 	return outdict

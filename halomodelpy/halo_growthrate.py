@@ -73,4 +73,4 @@ def halo_formation_rate(log_m, zs):
     dens = np.flip(dens)
 
     # number formed per year is hmf(t)-hmf(t-dt) in time interval
-    return np.gradient(dens, times)
+    return np.flip(np.gradient(dens, times))
