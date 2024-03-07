@@ -32,12 +32,12 @@ class HOD_model(object):
 							transfer_function=transfer, matter_power_spectrum='linear')
 		self.k_space = hubbleunits.remove_h_from_wavenum(paramobj.k_space)
 
-		self.mdef = ccl.halos.massdef.MassDef.from_name(paramobj.mass_def)(c_m=paramobj.c_m)
-		self.c_m_relation = ccl.halos.concentration.concentration_from_name(paramobj.c_m)(mdef=self.mdef)
-		self.hmf_mod = ccl.halos.hmfunc.mass_function_from_name(ccl_name_dict[paramobj.hmfmodel])(cosmo=self.cosmo, mass_def=self.mdef)
-		self.bias_mod = ccl.halos.hbias.halo_bias_from_name(ccl_name_dict[paramobj.biasmodel])(cosmo=self.cosmo, mass_def=self.mdef)
-		self.hmc = ccl.halos.halo_model.HMCalculator(cosmo=self.cosmo, massfunc=self.hmf_mod,
-													 hbias=self.bias_mod, mass_def=self.mdef)
+		self.mdef = ccl.halos.massdef.MassDef.from_name(paramobj.mass_def)
+		self.c_m_relation = ccl.halos.concentration.Concentration.from_name(paramobj.c_m)(mass_def=self.mdef)
+		self.hmf_mod = ccl.halos.hmfunc.MassFunc.from_name(ccl_name_dict[paramobj.hmfmodel])(mass_def=self.mdef)
+		self.bias_mod = ccl.halos.hbias.HaloBias.from_name(ccl_name_dict[paramobj.biasmodel])(mass_def=self.mdef)
+		self.hmc = ccl.halos.halo_model.HMCalculator(mass_function=self.hmf_mod,
+													 halo_bias=self.bias_mod, mass_def=self.mdef)
 
 		self.a_space = z_to_a(np.array(z_space))
 
@@ -71,8 +71,8 @@ class HOD_model(object):
 		sigm = np.log(10 ** sigm)
 		# input parameters will have little h units, but CCL uses plain units, so convert
 		mmin, m0, m1 = hubbleunits.remove_h_from_logmass([mmin, m0, m1])
-		return ccl.halos.profiles.HaloProfileHOD(c_M_relation=self.c_m_relation, lMmin_0=mmin,
-		                siglM_0=sigm, lM0_0=m0, lM1_0=m1, alpha_0=alpha)
+		return ccl.halos.profiles.HaloProfileHOD(mass_def=self.mdef, concentration=self.c_m_relation, log10Mmin_0=mmin,
+		                siglnM_0=sigm, log10M0_0=m0, log10M1_0=m1, alpha_0=alpha)
 
 
 	# calculate P(k, z) with given hod parameters
@@ -81,11 +81,11 @@ class HOD_model(object):
 		if get_1h * get_2h:
 			smoothfunc = self.smooth_1h_2h_transition_func
 
-		return hubbleunits.add_h_to_power(np.array(ccl.halos.halo_model.halomod_power_spectrum(cosmo=self.cosmo,
+		return hubbleunits.add_h_to_power(np.array(ccl.halos.pk_2pt.halomod_power_spectrum(cosmo=self.cosmo,
 								hmc=self.hmc, k=self.k_space,
 								a=self.a_space, prof=self.hod_profile(hodparams),
 								prof_2pt=self.two_pt_hod_profile,
-								supress_1h=self.large_scale_1h_suppresion_func, normprof1=True, normprof2=True,
+								suppress_1h=self.large_scale_1h_suppresion_func,
 								get_1h=get_1h, get_2h=get_2h,
 								smooth_transition=smoothfunc)))
 
