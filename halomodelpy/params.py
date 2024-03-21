@@ -6,10 +6,14 @@ from colossus.lss import mass_function
 
 class param_obj(object):
 	def __init__(self):
+		# minimum log(k) for wavenumber integration grid
 		self.logk_min = -5
+		# maximum log(k) for grid
 		self.logk_max = 3
+		# number of k points on integration gride
 		self.nks = 256
 
+		# redshift of CMB
 		self.cmb_z = 1090.
 
 		# k space grid in units h/Mpc
@@ -20,10 +24,15 @@ class param_obj(object):
 		self.col_cosmo = cosmology.setCosmology('planck18')
 		# convert to astropy cosmology for some calculations
 		self.apcosmo = self.col_cosmo.toAstropy()
+		# only 200x critical implemented
 		self.mass_def = '200c'
+		# bias/halo mass relation, choose between offerings from colossus
 		self.biasmodel = 'tinker10'
+		# halo mass function model, choose between offerings from colossus
 		self.hmfmodel = 'tinker08'
+		# concentration-mass relation, choose between offerings from colossus
 		self.colossus_c_m = 'duffy08'
+		# concentration-mass relation key to pass to ccl
 		self.c_m = 'Duffy08'
 
 		self.bias_relation = partial(bias.haloBias, model=self.biasmodel, mdef=self.mass_def)
