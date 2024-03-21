@@ -65,7 +65,7 @@ def halo_formation_rate(log_m, zs):
     """
 
     # chronological ages of universe
-    times = np.flip(apcosmo.age(zs)).to('yr').value
+    times = np.flip(apcosmo.age(zs)).to('Gyr').value
 
     dens = []
     for z in zs:

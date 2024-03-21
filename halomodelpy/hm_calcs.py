@@ -97,11 +97,21 @@ def xi_hexadecapole(s, xi, beta, j3, j5, bz):
 
 
 
-# project power spectra as a function of redshift to an angular correlation function
-# can do a cross-correlation function if second power spectrum and redshift distribution given
-# the input power spectra should already be biased wrt dark matter if necessary
-# make sure P(k), k, chi, H have uniform little h units
+#
 def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_z, H_z):
+	"""
+	project power spectra as a function of redshift to an angular correlation function
+	can do a cross-correlation function if second power spectrum and redshift distribution given
+	the input power spectra should already be biased wrt dark matter if necessary
+	make sure P(k), k, chi, H have uniform little h units
+	:param pk_z: 2d array P(k, z)
+	:param dndz: tuple (zs, dn/dz)
+	:param thetas: separations in degrees
+	:param k_grid: wavenumber grid for integral
+	:param chi_z: function, takes z, returns comoving distance
+	:param H_z: function, takes z, returns Hubble parameter
+	:return: angular correlation function
+	"""
 
 	# convert input thetas to radians from degrees
 	thetas = (thetas * u.deg).to('radian').value
@@ -252,8 +262,19 @@ def pk_z_to_multipole(pk_z, dndz, beta_z, s, k_grid, j3, j5, bz, ell=0):
 
 
 
-# get cross spectrm C_ell between galaxy overdensity and gravitational lensing
 def c_ell_kappa_g(pk_z, dndz, ells, k_grid, chi_z, H_z, lin_pk_z, lenskern):
+	"""
+	get cross spectrm C_ell between galaxy overdensity and lensing convergence kappa
+	:param pk_z:
+	:param dndz:
+	:param ells:
+	:param k_grid:
+	:param chi_z:
+	:param H_z:
+	:param lin_pk_z:
+	:param lenskern:
+	:return:
+	"""
 	qsokern = H_z / const.c.to(u.km / u.s).value * dndz[1]
 
 	integrand = (const.c.to(u.km / u.s).value * lenskern * qsokern / ((chi_z ** 2) * H_z))
@@ -314,10 +335,17 @@ def cmb_kappa(pk_z, dndz, k_grid, lin_pk_z, l_beam=None, theta_grid=np.radians(n
 	return kappa_prof
 
 
-# compute statistics for dark matter or tracers linearly biased against it
+
 class halomodel(object):
 
 	def __init__(self, dndz1, dndz2=None, littleh_units=True, transfer='eisenstein_hu'):
+		"""
+		Compute observables in the halo model for a given galaxy-halo connection
+		:param dndz1: Initialize with a redshift distribution tuple (zs, dndz)
+		:param dndz2: If doing a cross-correlation, also need a second dndz
+		:param littleh_units: Using hubble units (default)
+		:param transfer: transfer function passed to CCL
+		"""
 
 		self.dndz = redshift_helper.norm_z_dist(dndz1)
 		self.zs = self.dndz[0]
@@ -354,10 +382,27 @@ class halomodel(object):
 		self.j3 = hamilton_j_interp(xis, rgrid, rgrid, 3)
 		self.j5 = hamilton_j_interp(xis, rgrid, rgrid, 5)
 
-	# reset the power spectrum according to an HOD if provided, or an effective mass-biased spectrum
+
 	def set_powspec(self, hodparams=None, hodparams2=None, log_meff=None, log_meff_2=None,
 					bias1=None, bias2=None, log_m_min1=None, log_m_min2=None, sigma1=None, sigma2=None,
 					get1h=True, get2h=True):
+		"""
+		Set the power spectrum according to an HOD if provided, or an effective mass-biased spectrum
+		Only pass one parameter, or two in case of cross-correlation
+		:param hodparams: 5-length array for Zheng+07 HOD [logMmin, sig_M, logM0, logM1, alpha]
+		:param hodparams2:
+		:param log_meff: Linear biased model from constant effective host halo mass across z
+		:param log_meff_2:
+		:param bias1: Linearly biased model for constant bias across z
+		:param bias2:
+		:param log_m_min1: Linearly biased model for a constant minimum host halo mass (step function HOD) across z
+		:param log_m_min2:
+		:param sigma1: To be used with log_m_min, allow a smoothing for a minmum halo mass
+		:param sigma2:
+		:param get1h: Bool to include one-halo power
+		:param get2h: Bool to include two-halo power
+		:return:
+		"""
 
 		if hodparams is not None:
 			self.pk_z = self.hm.hod_pk_a(hodparams=hodparams, get_1h=get1h, get_2h=get2h)
@@ -401,32 +446,65 @@ class halomodel(object):
 
 
 	def get_ang_cf(self, thetas):
+		"""
+		Compute angular correlation function at given separations
+		:param thetas: separations in deg
+		"""
 		return pk_z_to_ang_cf(pk_z=self.pk_z, dndz=self.dndz, thetas=thetas, k_grid=self.k_grid,
 							  chi_z=self.chi_z, H_z=self.Hz)
 
 	def get_c_ell_gg(self, ells):
+		"""
+		Compute auto galaxy power spectrum
+		:param ells: angular ell modes
+		"""
 		return pk_z_to_cl_gg(pk_z=self.pk_z, dndz=self.dndz, ells=ells, k_grid=self.k_grid,
 							 chi_z=self.chi_z, H_z=self.Hz)
 
 	def get_binned_ang_cf(self, theta_bins):
-		# get unbinned cf with padding
+		"""
+		Compute angular correlation function in angular bins
+		:param theta_bins: bins in deg
+		"""
+		# get unbinned cf with padding on each side of requested bins
 		thetagrid = np.logspace(np.log10(np.min(theta_bins)/2.), np.log10(np.max(theta_bins)*2.), 100)
 		wtheta = self.get_ang_cf(thetas=thetagrid)
 		return stats.binned_statistic(thetagrid, wtheta, statistic='mean', bins=theta_bins)[0]
 
 	def get_spatial_cf(self, radii=np.logspace(-1., 1., 300), projected=True):
+		"""
+		Compute spatial (3d) correlation function in real-space
+		:param radii: r or r_p
+		:param projected: if True, get wp(rp), otherwise get xi(r)
+		:return:
+		"""
 		return pk_z_to_xi_r(pk_z=self.pk_z, dndz=self.dndz, radii=radii, k_grid=self.k_grid, projected=projected)
 
 	def get_binned_spatial_cf(self, radius_bins, projected=True):
+		"""
+		Compute spatial (3d) correlation function in bins
+		:param radius_bins: r or rp bins
+		:param projected: if True, get wp(rp), otherwise get xi(r)
+		"""
 		sepgrid = np.logspace(np.log10(np.min(radius_bins)/2.), np.log10(np.max(radius_bins)*2.), 100)
 		wp = self.get_spatial_cf(radii=sepgrid, projected=projected)
 		return stats.binned_statistic(sepgrid, wp, statistic='mean', bins=radius_bins)[0]
 
 	def get_c_ell_kg(self, ells):
+		"""
+		Compute an angular cross-power spectrum between galaxy density and lensing convergence
+		:param ells: angular ell modes
+		"""
 		return c_ell_kappa_g(pk_z=self.pk_z, dndz=self.dndz, ells=ells, k_grid=self.k_grid,
 							 chi_z=self.chi_z, H_z=self.Hz, lin_pk_z=self.lin_pk_z, lenskern=self.lens_kernel)
 
 	def get_binned_c_ell_kg(self, ell_bins=None, master_workspace=None):
+		"""
+		Compute an angular cross-power spectrum between galaxy density and lensing convergence in ell bins
+		:param ell_bins: angular ell bins, only if not using master_workspace
+		:param master_workspace: optionally, use NaMaster mode coupling object to measure the bandpowers
+		:return:
+		"""
 		if ell_bins is not None:
 			ell_grid = np.logspace(np.log10(np.min(ell_bins)/2.), np.log10(np.max(ell_bins)*2.), 100)
 		else:
@@ -439,21 +517,49 @@ class halomodel(object):
 		return binned_xpow
 
 	def get_binned_kappa_prof(self, theta_bins, l_beam=None, theta_grid=np.radians(np.linspace(0.001, 3, 1000))):
+		"""
+		Compute average lensing convergence (kappa) profile
+		:param theta_bins: angular bins in deg
+		:param l_beam: smoothing beam in Fourier space which was applied to lensing map
+		:param theta_grid:
+		"""
 		kappa_theta = cmb_kappa(pk_z=self.pk_z, dndz=self.dndz, k_grid=self.k_grid, lin_pk_z=self.lin_pk_z,
 								l_beam=l_beam, theta_grid=theta_grid)
 		return stats.binned_statistic(np.degrees(theta_grid), kappa_theta, statistic='mean', bins=theta_bins)[0]
 
 	def get_multipole(self, s, ell=0):
+		"""
+		Compute xi(s) for a multipole
+		:param s: comoving separations
+		:param ell: multipole 0, 2, or 4
+		:return:
+		"""
 		return pk_z_to_multipole(pk_z=self.pk_z, dndz=self.dndz,
 								 beta_z=beta_param(self.bzs, self.zs), bz=self.bzs,
 								 s=s, k_grid=self.k_grid, j3=self.j3, j5=self.j5, ell=ell)
 
 	def get_binned_multipole(self, s_bins, ell=0):
+		"""
+		Compute xi(s) for a multipole in bins
+		:param s_bins: separation bins
+		:param ell: multipole 0, 2, 4
+		:return:
+		"""
 		s_grid = np.logspace(np.log10(np.min(s_bins) / 2.), np.log10(np.max(s_bins) * 2.), 100)
 		xi_s = self.get_multipole(s=s_grid, ell=ell)
 		return stats.binned_statistic(s_grid, xi_s, statistic='mean', bins=s_bins)[0]
 
 	def get_xi_rp_pi(self, rp, pi, sigz=None, mono=True, quad=True, hexa=True):
+		"""
+		Compute two-dimensional correlation in rp, pi space
+		:param rp: projected separations
+		:param pi: LOS separations
+		:param sigz: optionally, assume your objects have redshift uncertainty which smears along pi direction
+		:param mono: Include the ell=0 contribution
+		:param quad: Include the ell=2 contribution
+		:param hexa: Include ell=4 contribution
+		:return:
+		"""
 		sig_chi = None
 		if sigz is not None:
 			sig_chi = np.average(self.dchidz * sigz)
@@ -462,6 +568,9 @@ class halomodel(object):
 								mono=mono, quad=quad, hexa=hexa)
 
 	def get_xi_s(self, rp, pi, s_bins, sigz=None, wedges=None, mono=True, quad=True, hexa=True):
+		"""
+		Compute clustering multipole by first going to 2D, then projecting back (to model redshift errors)
+		"""
 		xirppi = self.get_xi_rp_pi(rp=rp, pi=pi, sigz=sigz, mono=mono, quad=quad, hexa=hexa)
 		xi_s = anisotropic2multipole(xirppi=xirppi, rps=rp, pis=pi, s_bins=s_bins, wedges=wedges)
 		return xi_s
