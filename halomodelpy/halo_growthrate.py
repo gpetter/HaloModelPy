@@ -8,6 +8,13 @@ col_cosmo = paramobj.col_cosmo
 apcosmo = paramobj.apcosmo
 
 def growthrate(m, z, wantmean=True):
+    """
+    parameters from Fakhouri+2010
+    :param m:
+    :param z:
+    :param wantmean:
+    :return:
+    """
     if wantmean:
         a = 46.1 * u.solMass / u.yr
         b = 1.11
