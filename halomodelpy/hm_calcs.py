@@ -18,11 +18,20 @@ col_cosmo = paramobj.col_cosmo
 apcosmo = paramobj.apcosmo
 
 
-# eq from Liu et al. 2015
-# return lensing kernel for CMB (if no source redshifts provided)
-# or lensing kernel for galaxy weak lensing if source redshifts are provided
+
 def lensing_kernel(lens_zs, chi_z_func=apcosmo.comoving_distance, H0=apcosmo.H0, om_0=apcosmo.Om0,
 				   source_zs=None):
+	"""
+	eq from Liu et al. 2015
+	return lensing kernel for CMB (if no source redshifts provided)
+	or lensing kernel for galaxy weak lensing if source redshifts are provided
+	:param lens_zs: redshifts at which to evaluate kernel
+	:param chi_z_func: function to calculate comoving distance
+	:param H0: Hubble constant
+	:param om_0: Omega matter today
+	:param source_zs:
+	:return:
+	"""
 	prefactor = 3. / 2. * om_0 * ((H0 / const.c.to(u.km / u.s).value) ** 2) * (1 + lens_zs) * chi_z_func(lens_zs)
 	# if no source redshifts, return CMB lensing kernel
 	if source_zs is None:
@@ -55,18 +64,37 @@ def lensing_kernel(lens_zs, chi_z_func=apcosmo.comoving_distance, H0=apcosmo.H0,
 
 
 def chi_z_func(zs, littleh_units=True):
+	"""
+	comoving distance
+	:param zs: redshifts
+	:param littleh_units: hubble units
+	:return:
+	"""
 	if littleh_units:
 		return hubbleunits.add_h_to_scale(apcosmo.comoving_distance(zs).value)
 	return apcosmo.comoving_distance(zs).value
 
 
 def Hubble_z(zs, littleh_units=True):
+	"""
+	Hubble parameter
+	:param zs: redshifts
+	:param littleh_units: hubble units
+	:return:
+	"""
 	if littleh_units:
 		return apcosmo.H(zs).to((u.km * cu.littleh / u.s / u.Mpc), cu.with_H0(apcosmo.H0)).value
 	else:
 		return apcosmo.H(zs).value
 
 def d_chi_dz(zs, chizfunc, littleh_units=True):
+	"""
+	Derivative of comoving distance with redshift
+	:param zs: redshifts
+	:param chizfunc: comoving distance function
+	:param littleh_units: hubble units
+	:return:
+	"""
 	chis = chizfunc(zs, littleh_units=littleh_units)
 	dchidz = np.gradient(chis, zs)
 	return lambda zz: interp1d(zs, dchidz)(zz)
@@ -154,6 +182,16 @@ def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_z, H_z):
 
 
 def pk_z_to_cl_gg(pk_z, dndz, ells, k_grid, chi_z, H_z):
+	"""
+	Transform power spectrum to angular power spectrum
+	:param pk_z: power spectrum P(k, z)
+	:param dndz: redshift distribution tuple (zs, dndz)
+	:param ells: angular modes to compute power at
+	:param k_grid: grid of wavenumbers for integral
+	:param chi_z: comoving distances to zs
+	:param H_z: hubble parameters at zs
+	:return:
+	"""
 
 	ks = np.outer(1. / chi_z_func(dndz[0]), (ells + 1 / 2.))
 
@@ -168,9 +206,18 @@ def pk_z_to_cl_gg(pk_z, dndz, ells, k_grid, chi_z, H_z):
 
 	return np.trapz(differentials * np.transpose(interped_power), x=dndz[0], axis=1)
 
-# Fourier transform input power spectra to correlation functions, convert to projected CFs wp(rp) if desired,
-# and project to observable for given redshift distribution(s)
+#
 def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, projected=True):
+	"""
+	Fourier transform input power spectra to spatial correlation functions, convert to projected CFs wp(rp) if desired,
+	and project to observable for given redshift distribution(s)
+	:param pk_z: power spectrum P(k, z)
+	:param dndz: redshift distribution tuple (zs, dndz)
+	:param radii: radii (physical or projected) to compute correlation function at
+	:param k_grid: grid of wavenumbers for integral
+	:param projected: if True, get wp(rp), otherwise get xi(r)
+	:return:
+	"""
 
 	if projected:
 		#xis = np.array(abel.direct.direct_transform(xis, r=rgrid, direction='forward', backend='python'))
@@ -187,6 +234,23 @@ def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, projected=True):
 	return np.trapz(dndz[1] * np.transpose(interpedxis), x=dndz[0], axis=1)
 
 def pk_z_to_xi_rp_pi(pk_z, dndz, beta_z, bz, rps, pis, k_grid, j3, j5, sigchi=None, mono=True, quad=True, hexa=True):
+	"""
+	Calculate analytic two-dimensional correlation function xi(rp, pi) from power spectrum
+	:param pk_z:
+	:param dndz:
+	:param beta_z:
+	:param bz:
+	:param rps:
+	:param pis:
+	:param k_grid:
+	:param j3:
+	:param j5:
+	:param sigchi:
+	:param mono:
+	:param quad:
+	:param hexa:
+	:return:
+	"""
 	rp_grid, pi_grid = np.meshgrid(rps, pis)
 	s_grid = np.sqrt(rp_grid ** 2 + pi_grid ** 2).ravel()
 	mu_grid = rp_grid.ravel() / s_grid

@@ -10,5 +10,5 @@ setup(
     author_email='Grayson.C.Petter.GR@dartmouth.edu', #not a real e-mail
     license='',
     packages=find_packages(),
-    install_requires=['colossus', 'mcfit']
+    install_requires=['numpy', 'scipy', 'astropy', 'pyccl', 'colossus', 'mcfit']
 )

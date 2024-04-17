@@ -26,16 +26,17 @@ def bias2mass(inputbias, z):
 	:return: log10(halo mass) (hubble units)
 	"""
 	# grid of masses for interpolation
-	masses = np.logspace(10, 15, 1000)
+	masses = np.linspace(10, 15, 1000)
 	# convert to biases
-	biases_from_masses = mass2bias(np.log10(masses), z)
+	biases_from_masses = mass2bias(masses, z)
 	# interpolate in log mass space
-	return np.interp(inputbias, biases_from_masses, np.log10(masses))
+	return np.interp(inputbias, biases_from_masses, masses)
 
 
 def mass_to_avg_bias(log_mh, zs, dndz, log_merr=None):
 	"""
-	take a characteristic halo mass and calculate the resulting average bias over a given redshift distribution
+	take a characteristic halo mass and calculate the resulting effective bias over a given redshift distribution
+	assuming the mass is constant with z
 	:param log_mh: log10(Halo mass) (hubble units)
 	:param zs: redshifts array
 	:param dndz: redshift distribution array

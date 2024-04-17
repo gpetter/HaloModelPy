@@ -77,10 +77,18 @@ def fit_cf(dndz, cf, model='mass'):
 
 	if 'rp' in cf:
 		angular = False
-		scalebins, corr, err = cf['rp_bins'], cf['wp'], cf['wp_err']
+		try:
+			scalebins, corr, err = cf['rp_bins'], cf['wp'], cf['wp_err']
+		except:
+			print('Using Poisson errors')
+			scalebins, corr, err = cf['rp_bins'], cf['wp'], cf['wp_poisson_err']
 	else:
 		angular = True
-		scalebins, corr, err = cf['theta_bins'], cf['w_theta'], cf['w_err']
+		try:
+			scalebins, corr, err = cf['theta_bins'], cf['w_theta'], cf['w_err']
+		except:
+			print('Using Poisson errors')
+			scalebins, corr, err = cf['theta_bins'], cf['w_theta'], cf['w_err_poisson']
 	if angular:
 		modscales = np.logspace(-2.5, 0.25, 200)
 		unbiasedmod = hmobj.get_ang_cf(modscales)
@@ -103,7 +111,7 @@ def fit_cf(dndz, cf, model='mass'):
 	elif model == 'bias':
 		partialfun = partial(biased_cf, scales=scalebins, hmobject=hmobj, angular=angular, idx=goodidx)
 		popt, pcov = curve_fit(partialfun, None, corr, sigma=err, absolute_sigma=True,
-							bounds=[0.5, 30], p0=2)
+							bounds=[0.5, 100], p0=2)
 		hmobj.set_powspec(bias1=popt[0])
 		outdict['b'], outdict['sigb'] = popt[0], np.sqrt(pcov)[0][0]
 
@@ -136,11 +144,19 @@ def fit_xcf(dndz_x, cf_x, dndz_auto, autocf, model='mass'):
 
 	if 'rp' in cf_x:
 		angular = False
-		scalebins, xcorr, xerr = cf_x['rp_bins'], cf_x['wp'], cf_x['wp_err']
+		try:
+			scalebins, xcorr, xerr = cf_x['rp_bins'], cf_x['wp'], cf_x['wp_err']
+		except:
+			print('Using Poisson errors')
+			scalebins, xcorr, xerr = cf_x['rp_bins'], cf_x['wp'], cf_x['wp_poisson_err']
 
 	else:
 		angular = True
-		scalebins, xcorr, xerr = cf_x['theta_bins'], cf_x['w_theta'], cf_x['w_err']
+		try:
+			scalebins, xcorr, xerr = cf_x['theta_bins'], cf_x['w_theta'], cf_x['w_err']
+		except:
+			print('Using Poisson errors')
+			scalebins, xcorr, xerr = cf_x['theta_bins'], cf_x['w_theta'], cf_x['w_err_poisson']
 
 	# dont use nans or zero errors in the fit
 	goodidx = np.where(np.isfinite(xcorr) & (np.isfinite(xerr)) & (xerr > 0))[0]
