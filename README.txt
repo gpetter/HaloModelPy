@@ -18,7 +18,8 @@ All inputs and outputs have little h units, conversion is done internally to int
 Installation:
 
 1. Make environment (anaconda) with numpy, scipy, astropy, pyccl, optionally emcee, corner
-2. pip install colossus, mcfit
+conda create -n myenv numpy scipy astropy pyccl emcee corner
+2. pip install git+https://github.com/gpetter/HaloModelPy.git
 3. Set params in params.py
 
 See notebooks/showcase.ipynb for usage

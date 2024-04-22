@@ -11,7 +11,7 @@ class param_obj(object):
 		# maximum log(k) for grid
 		self.logk_max = 3
 		# number of k points on integration gride
-		self.nks = 256
+		self.nks = 512
 
 		# redshift of CMB
 		self.cmb_z = 1090.

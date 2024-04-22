@@ -1,7 +1,5 @@
 import numpy as np
 from . import hm_calcs
-
-from . import interpolate_helper
 from functools import partial
 from scipy.optimize import curve_fit
 

@@ -1,7 +1,13 @@
 import numpy as np
-from . import interpolate_helper
 from scipy import interpolate as interp
 
+def bin_centers(binedges, method):
+	if method == 'mean':
+		return (binedges[1:] + binedges[:-1]) / 2
+	elif method == 'geo_mean':
+		return np.sqrt(binedges[1:] * binedges[:-1])
+	else:
+		return None
 
 # ensure the redshift distribution is properly normalized
 def norm_z_dist(dndz):
@@ -13,7 +19,7 @@ def dndz_from_z_list(zs, nbins, zrange=None):
 		print('Warning: redshifts z<=0 passed, cutting')
 		zs = zs[np.where(zs > 0.)]
 	dndz, zbins = np.histogram(zs, bins=nbins, density=True, range=zrange)
-	zcenters = interpolate_helper.bin_centers(zbins, method='mean')
+	zcenters = bin_centers(zbins, method='mean')
 	dndz = dndz / np.trapz(dndz, x=zcenters)
 	return np.array(zcenters, dtype=np.float64), np.array(dndz, dtype=np.float64)
 
@@ -80,5 +86,5 @@ def dz2dvol(zbins):
 	chis = cosmo.col_cosmo.comovingDistance(np.zeros(len(zbins)), zbins)
 	outershellvols = 4 / 3 * np.pi * chis[1:] ** 3
 	innershellvols = 4 / 3 * np.pi * chis[:-1] ** 3
-	zcenters = interpolate_helper.bin_centers(zbins, method='mean')
+	zcenters = bin_centers(zbins, method='mean')
 	return zcenters, outershellvols - innershellvols

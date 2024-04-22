@@ -2,6 +2,7 @@ import numpy as np
 import astropy.units as u
 import mcfit
 from scipy.interpolate import interp1d, RegularGridInterpolator
+from scipy.integrate import cumulative_trapezoid
 import astropy.constants as const
 import astropy.cosmology.units as cu
 from functools import partial
@@ -104,14 +105,28 @@ def d_chi_dz(zs, chizfunc, littleh_units=True):
 def beta_param(bs, zs):
 	return apcosmo.Om(zs) ** 0.56 / bs
 
-# needed for calculating quadrupole or hexadecapole. Eq. 6.65 in Mo, vanden Bosch, White textbook
-def hamilton_j_interp(xi, sgrid, ss, n):
-	jx = []
-	for s in ss:
-		maxidx = np.argmin(np.abs(s - sgrid))
-		jx.append(np.trapz(xi[:, :maxidx] * sgrid[:maxidx] ** (n-1), x=sgrid[:maxidx]))
-	lin_interp = interp1d(np.log10(ss), jx, axis=0)
-	return lambda zz: np.transpose(lin_interp(np.log10(zz)))
+
+def hamiltonJ(xi, sgrid, n):
+	"""
+	Integral needed when calculating RSD quadrupole or hexadecapole. Eq. 6.65 in Mo, vanden Bosch, White textbook
+	from Hamilton 1992
+	:param xi:
+	:param sgrid:
+	:param n:
+	:return:
+	"""
+
+	integrand = xi * sgrid ** (n - 1)
+	integrals = cumulative_trapezoid(y=integrand, x=sgrid, axis=1)
+	boundgrid = sgrid[1:]
+	if n == 5:
+		return lambda esses: interp1d(np.log10(boundgrid), (boundgrid ** -4) * integrals, axis=1)(np.log10(esses)) \
+							 / (esses ** -4)
+	else:
+		return lambda esses: 10 ** interp1d(np.log10(boundgrid), np.log10(integrals), axis=1)(np.log10(esses))
+
+
+
 
 def xi_monopole(xi, beta):
 	return (1. + 2./3. * beta + 1./5. * beta ** 2.) * xi
@@ -120,12 +135,11 @@ def xi_quadrupole(s, xi, beta, j3, bz):
 	return (4./3. * beta + 4./7. * beta ** 2.) * (xi - 3. * (bz ** 2. * j3(s)) / s ** 3.)
 
 def xi_hexadecapole(s, xi, beta, j3, j5, bz):
-	return 8./35. * beta ** 2. * (xi + 15./(2. * s ** 3) * (bz ** 2. * j3(s)) - 35./(2. * s ** 5.) * (bz ** 2. * j5(s)))
+	return 8./35. * beta ** 2. * (xi + (bz ** 2. * j3(s)) * 15. / (2 * (s ** 3)) - 35./(2. * s ** 5.) * (bz ** 2. * j5(s)))
 
 
 
 
-#
 def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_z, H_z):
 	"""
 	project power spectra as a function of redshift to an angular correlation function
@@ -181,7 +195,7 @@ def pk_z_to_ang_cf(pk_z, dndz, thetas, k_grid, chi_z, H_z):
 	return 1 / (2 * np.pi) * np.trapz(differentials * interped_dipomp, x=dndz[0], axis=1)
 
 
-def pk_z_to_cl_gg(pk_z, dndz, ells, k_grid, chi_z, H_z):
+def pk_z_to_cl_gg(pk_z, dndz, ells, k_grid, chi_z, H_z, lin_pk_z):
 	"""
 	Transform power spectrum to angular power spectrum
 	:param pk_z: power spectrum P(k, z)
@@ -193,18 +207,23 @@ def pk_z_to_cl_gg(pk_z, dndz, ells, k_grid, chi_z, H_z):
 	:return:
 	"""
 
-	ks = np.outer(1. / chi_z_func(dndz[0]), (ells + 1 / 2.))
+	gkern = H_z / const.c.to(u.km / u.s).value * dndz[1]
 
-	dz_d_chi = (H_z / const.c.to(u.km / u.s).value)
-	# product of redshift distributions, and dz/dchi
-	differentials = dz_d_chi * dndz[1] / chi_z ** 2
+	integrand = (const.c.to(u.km / u.s).value * gkern ** 2 / ((chi_z ** 2) * H_z))
+	ks = np.outer(1. / chi_z, (ells + 1 / 2.))
 
-	interped_power = []
+	# P(k) is b^2 P_lin, so sqrt(P(k)) * sqrt(P_lin) = b * P_lin
+	pk_z = np.sqrt(pk_z) * np.sqrt(lin_pk_z)
+
+	ps_at_ks = []
 	for j in range(len(dndz[0])):
-		pk = pk_z[j]
-		interped_power.append(10 ** interp1d(np.log10(k_grid), np.log10(pk))(np.log10(ks[j])))
+		ps_at_ks.append(np.interp(ks[j], k_grid, pk_z[j]))
 
-	return np.trapz(differentials * np.transpose(interped_power), x=dndz[0], axis=1)
+	ps_at_ks = np.array(ps_at_ks)
+
+	integrand = integrand[:, None] * ps_at_ks
+
+	return np.trapz(integrand, dndz[0], axis=0)
 
 #
 def pk_z_to_xi_r(pk_z, dndz, radii, k_grid, projected=True):
@@ -339,9 +358,9 @@ def c_ell_kappa_g(pk_z, dndz, ells, k_grid, chi_z, H_z, lin_pk_z, lenskern):
 	:param lenskern:
 	:return:
 	"""
-	qsokern = H_z / const.c.to(u.km / u.s).value * dndz[1]
+	gkern = H_z / const.c.to(u.km / u.s).value * dndz[1]
 
-	integrand = (const.c.to(u.km / u.s).value * lenskern * qsokern / ((chi_z ** 2) * H_z))
+	integrand = (const.c.to(u.km / u.s).value * lenskern * gkern / ((chi_z ** 2) * H_z))
 	ks = np.outer(1. / chi_z, (ells + 1 / 2.))
 
 	# P(k) is b^2 P_lin, so sqrt(P(k)) * sqrt(P_lin) = b * P_lin
@@ -443,8 +462,9 @@ class halomodel(object):
 		self.dchidz = const.c.to('km/s').value / self.hzfunc(self.zs)
 
 		rgrid, xis = mcfit.P2xi(self.k_grid, lowring=True)(self.lin_pk_z, axis=1, extrap=True)
-		self.j3 = hamilton_j_interp(xis, rgrid, rgrid, 3)
-		self.j5 = hamilton_j_interp(xis, rgrid, rgrid, 5)
+
+		self.j3 = hamiltonJ(xi=xis, sgrid=rgrid, n=3)
+		self.j5 = hamiltonJ(xi=xis, sgrid=rgrid, n=5)
 
 
 	def set_powspec(self, hodparams=None, hodparams2=None, log_meff=None, log_meff_2=None,
@@ -523,7 +543,7 @@ class halomodel(object):
 		:param ells: angular ell modes
 		"""
 		return pk_z_to_cl_gg(pk_z=self.pk_z, dndz=self.dndz, ells=ells, k_grid=self.k_grid,
-							 chi_z=self.chi_z, H_z=self.Hz)
+							 chi_z=self.chi_z, H_z=self.Hz, lin_pk_z=self.lin_pk_z)
 
 	def get_binned_ang_cf(self, theta_bins):
 		"""
@@ -579,6 +599,16 @@ class halomodel(object):
 		else:
 			binned_xpow = 10 ** (stats.binned_statistic(ell_grid, np.log10(xpower), statistic='median', bins=ell_bins)[0])
 		return binned_xpow
+
+	def get_kappa_prof(self, thetas, l_beam=None):
+		"""
+		Compute lensing convergence (kappa) profile
+		:param theta_bins: angular bins in deg
+		:param l_beam: smoothing beam in Fourier space which was applied to lensing map
+		:return:
+		"""
+		return cmb_kappa(pk_z=self.pk_z, dndz=self.dndz, k_grid=self.k_grid, lin_pk_z=self.lin_pk_z,
+								l_beam=l_beam, theta_grid=thetas)
 
 	def get_binned_kappa_prof(self, theta_bins, l_beam=None, theta_grid=np.radians(np.linspace(0.001, 3, 1000))):
 		"""

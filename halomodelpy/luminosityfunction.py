@@ -1,5 +1,4 @@
 import numpy as np
-import os
 import astropy.units as u
 from . import cosmo
 from . import hubbleunits
